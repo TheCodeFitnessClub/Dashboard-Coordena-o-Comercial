@@ -3,10 +3,26 @@ const https   = require('https');
 const http    = require('http');
 const { URL } = require('url');
 const path    = require('path');
+const { Pool } = require('pg');
 
 const app = express();
+app.use(express.json({ limit: '20mb' }));
 
-// ── CORS (necessário para o dashboard chamar /proxy) ─────────────────────────
+// ── PostgreSQL ────────────────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS app_state (
+    id          INTEGER PRIMARY KEY DEFAULT 1,
+    data        JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('DB init error:', e.message));
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -19,9 +35,35 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'Dashboard_v2.html'));
 });
 
+// ── API: ler estado ───────────────────────────────────────────────────────────
+app.get('/api/state', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT data, updated_at FROM app_state WHERE id = 1');
+    if (result.rows.length === 0) return res.json({ data: null });
+    res.json({ data: result.rows[0].data, updated_at: result.rows[0].updated_at });
+  } catch (e) {
+    console.error('GET /api/state:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: guardar estado ───────────────────────────────────────────────────────
+app.post('/api/state', async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data) return res.status(400).json({ error: 'data required' });
+    await pool.query(`
+      INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, NOW())
+      ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = NOW()
+    `, [data]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('POST /api/state:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Proxy → API Closum ────────────────────────────────────────────────────────
-// Chamada:  GET /proxy?url=https://api.closum.com/v2/lead/?api-key=...
-// (mesmo padrão que o proxy.ps1 usava em localhost:3001)
 app.get('/proxy', (req, res) => {
   const target = req.query.url;
   if (!target) return res.status(400).json({ error: 'url param required' });
@@ -30,7 +72,6 @@ app.get('/proxy', (req, res) => {
   try { parsed = new URL(target); }
   catch (e) { return res.status(400).json({ error: 'invalid url' }); }
 
-  // Whitelist: só api.closum.com
   if (!parsed.hostname.endsWith('closum.com')) {
     return res.status(403).json({ error: 'forbidden domain' });
   }
@@ -41,10 +82,7 @@ app.get('/proxy', (req, res) => {
     port     : parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
     path     : parsed.pathname + (parsed.search || ''),
     method   : 'GET',
-    headers  : {
-      'User-Agent' : 'TheCode-Dashboard/2.0',
-      'Accept'     : 'application/json',
-    },
+    headers  : { 'User-Agent': 'TheCode-Dashboard/2.0', 'Accept': 'application/json' },
   };
 
   const proxyReq = lib.request(options, (proxyRes) => {
