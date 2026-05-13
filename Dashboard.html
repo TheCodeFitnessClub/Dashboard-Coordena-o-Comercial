@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>The Code — Coordenação</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --orange:#C0492B; --orange-d:#9b3a21; --orange-l:#F4D7CC;
+    --dark:#1F1F1F; --grey:#595959; --grey-l:#F2F2F2; --line:#E5E5E5;
+    --green:#2E7D32; --green-l:#D4EDDA;
+    --red:#C62828; --red-l:#F8D7DA;
+    --yellow:#F9A825; --yellow-l:#FFF3CD;
+    --blue:#1565C0; --bg:#FAFAFA;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Inter','Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--dark);min-height:100vh}
+  button{font-family:inherit}
+  header{background:var(--dark);color:white;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  header h1{margin:0;font-size:18px;letter-spacing:.5px;font-weight:600}
+  header h1 span{color:var(--orange)}
+  header .meta{font-size:11px;color:#aaa}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 24px;background:white;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+  .toolbar label{font-size:12px;color:var(--grey)}
+  .toolbar select, .toolbar input{padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:white}
+  .toolbar button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:white;cursor:pointer;font-weight:500}
+  .toolbar button:hover{background:var(--grey-l)}
+  .toolbar button.primary{background:var(--orange);color:white;border-color:var(--orange)}
+  .toolbar button.primary:hover{background:var(--orange-d)}
+  .toolbar .file-input{display:none}
+  .toolbar .spacer{flex:1}
+  .toolbar .save-status{font-size:11px;color:var(--grey)}
+  .toolbar .save-status.saved{color:var(--green)}
+  nav.tabs{display:flex;gap:0;background:white;border-bottom:1px solid var(--line);padding:0 24px;overflow-x:auto;white-space:nowrap;position:sticky;top:48px;z-index:40}
+  nav.tabs button{background:none;border:none;padding:12px 16px;font-size:13px;cursor:pointer;color:var(--grey);border-bottom:3px solid transparent;font-family:inherit}
+  nav.tabs button:hover{color:var(--dark)}
+  nav.tabs button.active{color:var(--orange);border-bottom-color:var(--orange);font-weight:600}
+  nav.tabs button .count{display:inline-block;background:var(--grey-l);color:var(--grey);font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px}
+  nav.tabs button.active .count{background:var(--orange-l);color:var(--orange)}
+  main{padding:20px 24px;max-width:1600px;margin:0 auto}
+  .panel{display:none}
+  .panel.active{display:block;animation:fade .15s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+  h2.section{font-size:14px;color:var(--dark);margin:24px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--orange);display:flex;align-items:center;justify-content:space-between;gap:10px;letter-spacing:.5px;text-transform:uppercase}
+  h2.section .actions{display:flex;gap:6px}
+  h2.section .actions button{padding:5px 10px;font-size:11px;border:1px solid var(--line);background:white;border-radius:5px;cursor:pointer;font-weight:500}
+  h2.section .actions button.primary{background:var(--orange);border-color:var(--orange);color:white}
+  h2.section .actions button:hover{background:var(--grey-l)}
+  h2.section .actions button.primary:hover{background:var(--orange-d)}
+  .grid{display:grid;gap:14px}
+  .grid.c4{grid-template-columns:repeat(4,1fr)}
+  .grid.c3{grid-template-columns:repeat(3,1fr)}
+  .grid.c2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:900px){.grid.c4,.grid.c3,.grid.c2{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.grid.c4,.grid.c3,.grid.c2{grid-template-columns:1fr}}
+  .kpi{background:white;border:1px solid var(--line);border-radius:10px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .kpi .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);font-weight:600}
+  .kpi .val{font-size:28px;font-weight:700;margin:6px 0 2px;color:var(--dark);line-height:1.1}
+  .kpi .sub{font-size:11px;color:var(--grey)}
+  .kpi.good .val{color:var(--green)}
+  .kpi.warn .val{color:var(--yellow)}
+  .kpi.bad .val{color:var(--red)}
+  .tbl-wrap{background:white;border:1px solid var(--line);border-radius:10px;overflow:auto;max-width:100%}
+  table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+  table.tbl th{background:var(--orange);color:white;text-align:left;padding:8px 10px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;font-weight:600;position:sticky;top:0;z-index:1}
+  table.tbl th.act{width:60px;text-align:center}
+  table.tbl td{padding:0;border-top:1px solid var(--line);vertical-align:middle}
+  table.tbl tbody tr:hover td{background:#FAFAFA}
+  table.tbl td.act{text-align:center;padding:4px}
+  table.tbl td.computed{padding:6px 10px;color:var(--grey);font-style:italic}
+  table.tbl td input, table.tbl td select, table.tbl td textarea{width:100%;border:none;background:transparent;padding:7px 10px;font-family:inherit;font-size:13px;color:inherit;outline:none}
+  table.tbl td input:focus, table.tbl td select:focus, table.tbl td textarea:focus{background:#FFF7E0;box-shadow:inset 0 0 0 2px var(--orange)}
+  table.tbl td textarea{resize:vertical;min-height:32px}
+  table.tbl td.num input{text-align:right;font-variant-numeric:tabular-nums}
+  table.tbl tr.cell-good td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+  table.tbl tr.cell-bad td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+  table.tbl tr.cell-warn td:first-child{box-shadow:inset 3px 0 0 var(--yellow)}
+  table.tbl td.cell-good{background:var(--green-l)!important;color:var(--green);font-weight:600}
+  table.tbl td.cell-bad{background:var(--red-l)!important;color:var(--red);font-weight:600}
+  table.tbl td.cell-warn{background:var(--yellow-l)!important;color:var(--yellow);font-weight:600}
+  .btn-icon{background:none;border:none;cursor:pointer;color:var(--grey);font-size:16px;padding:4px 6px;border-radius:4px}
+  .btn-icon:hover{background:var(--red-l);color:var(--red)}
+  .btn-icon.dup:hover{background:var(--orange-l);color:var(--orange)}
+  .empty{padding:30px;text-align:center;color:var(--grey);font-size:13px;background:white;border:1px dashed var(--line);border-radius:10px}
+  .chart-wrap{background:white;border:1px solid var(--line);border-radius:10px;padding:14px;height:320px;position:relative}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:white;border-radius:12px;padding:24px;max-width:500px;width:100%;max-height:85vh;overflow:auto}
+  .modal h3{margin:0 0 16px;color:var(--dark);font-size:16px}
+  .modal p{font-size:13px;color:var(--grey);line-height:1.6;margin:0 0 16px}
+  .modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+  .modal .actions button{padding:8px 16px;border-radius:6px;border:1px solid var(--line);background:white;cursor:pointer;font-size:13px;font-family:inherit}
+  .modal .actions button.primary{background:var(--orange);color:white;border-color:var(--orange)}
+  .modal .actions button.danger{background:var(--red);color:white;border-color:var(--red)}
+  .meet-tpl{background:white;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}
+  .meet-tpl h3{margin:0 0 6px;color:var(--orange);font-size:14px}
+  .meet-tpl .desc{font-size:11px;color:var(--grey);margin-bottom:12px}
+  .meet-tpl ul{margin:0;padding-left:18px;font-size:12px;line-height:1.7}
+  .meet-tpl ul li strong{color:var(--dark)}
+  .meet-rule{background:var(--orange-l);border-left:3px solid var(--orange);padding:8px 12px;font-size:11px;color:var(--dark);margin-top:10px;border-radius:0 6px 6px 0}
+  .kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:10px}
+  @media(max-width:1100px){.kanban{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.kanban{grid-template-columns:1fr}}
+  .kanban-col{background:white;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:200px}
+  .kanban-col h4{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--grey)}
+  .kanban-col h4 .n{background:var(--grey-l);color:var(--grey);padding:1px 6px;border-radius:8px;font-size:10px;margin-left:4px}
+  .kanban-col[data-status="A fazer"] h4{color:var(--grey)}
+  .kanban-col[data-status="Em curso"] h4{color:var(--orange)}
+  .kanban-col[data-status="Bloqueada"] h4{color:var(--red)}
+  .kanban-col[data-status="Feita"] h4{color:var(--green)}
+  .task-card{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;cursor:grab;border-left:3px solid var(--orange)}
+  .task-card.prio-Alta{border-left-color:var(--red)}
+  .task-card.prio-Média{border-left-color:var(--yellow)}
+  .task-card.prio-Baixa{border-left-color:var(--blue)}
+  .task-card .t-title{font-weight:600;color:var(--dark);margin-bottom:4px}
+  .task-card .t-meta{display:flex;justify-content:space-between;color:var(--grey);font-size:10px;margin-top:4px}
+  .task-card.overdue{background:var(--red-l)}
+  .task-card.overdue .t-meta{color:var(--red);font-weight:600}
+  .alerts{background:white;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .alert-item{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;padding:10px 14px;border-top:1px solid var(--line);font-size:12px;align-items:center}
+  .alert-item:first-child{border-top:none}
+  .alert-item .a-kpi{font-weight:600}
+  .alert-item .a-val{color:var(--grey);font-variant-numeric:tabular-nums}
+  .alert-item .a-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+  .alert-item .a-status.ok{background:var(--green-l);color:var(--green)}
+  .alert-item .a-status.bad{background:var(--red-l);color:var(--red)}
+  .alert-item .a-action{font-size:11px;color:var(--grey);text-align:right}
+  .footer{font-size:10px;color:var(--grey);text-align:center;padding:24px 0}
+  .tbl-search{padding:8px 12px;background:white;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .tbl-search input{flex:1;border:1px solid var(--line);border-radius:5px;padding:5px 10px;font-size:12px}
+  .tbl-search .count{font-size:11px;color:var(--grey)}
+  .agenda-cell{padding:6px 8px!important;min-width:340px}
+  .agenda-list{display:flex;flex-direction:column;gap:4px}
+  .agenda-item{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:5px;background:#FAFAFA;border:1px solid var(--line)}
+  .agenda-item input[type="checkbox"]{margin:0;cursor:pointer;width:16px;height:16px;accent-color:var(--orange)}
+  .agenda-item input[type="text"]{flex:1;border:none;background:transparent;padding:4px 6px;font-size:12px;outline:none}
+  .agenda-item input[type="text"]:focus{background:#FFF7E0}
+  .agenda-item.done{background:var(--green-l);border-color:#A8D8B5}
+  .agenda-item.done input[type="text"]{text-decoration:line-through;color:var(--grey)}
+  .agenda-item .btn-icon{padding:2px 6px;font-size:13px}
+  .btn-add-agenda{background:none;border:1px dashed var(--orange);color:var(--orange);padding:5px 10px;font-size:11px;border-radius:5px;cursor:pointer;align-self:flex-start;margin-top:2px;font-family:inherit}
+  .btn-add-agenda:hover{background:var(--orange-l)}
+  .file-cell{padding:6px 10px!important}
+  .file-link{color:var(--orange);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--orange-l);border-radius:4px;margin-right:6px}
+  .file-link:hover{background:var(--orange);color:white}
+  .file-meta{font-size:10px;color:var(--grey);margin-left:4px}
+  .banner{background:#FFF7E0;border:1px solid #F4D7A6;color:#8a5a00;padding:8px 14px;border-radius:8px;font-size:12px;margin:10px 0;display:flex;align-items:center;gap:10px}
+  .banner.success{background:var(--green-l);border-color:#A8D8B5;color:var(--green)}
+  .banner.error{background:var(--red-l);border-color:#E5A8A8;color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <h1>THE <span>CODE</span> · Coordenação Comercial e Operacional</h1>
+  <div class="meta" id="meta">localStorage activo · v2.1</div>
+</header>
+<div class="toolbar">
+  <label style="padding:6px 10px;border:1px dashed var(--orange);color:var(--orange);border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">⬆ Importar XLSX
+    <input type="file" id="file-input" class="file-input" accept=".xlsx,.xls">
+  </label>
+  <button id="btn-export-xlsx">⬇ Exportar XLSX</button>
+  <button id="btn-export-json">⬇ Backup JSON</button>
+  <button id="btn-import-json">⬆ Restaurar JSON</button>
+  <input type="file" id="json-input" class="file-input" accept=".json">
+  <span style="height:18px;border-left:1px solid var(--line);margin:0 4px"></span>
+  <label>Unidade:</label>
+  <select id="filter-unit"><option value="">Todas</option></select>
+  <label>Comercial:</label>
+  <select id="filter-com"><option value="">Todos</option></select>
+  <label>Período:</label>
+  <select id="filter-period">
+    <option value="">Tudo</option>
+    <option value="hoje">Hoje</option>
+    <option value="semana">Esta semana</option>
+    <option value="mes">Este mês</option>
+    <option value="30d">Últimos 30 dias</option>
+  </select>
+  <span class="spacer"></span>
+  <span class="save-status" id="save-status">Pronto</span>
+  <button id="btn-clear" style="color:var(--red)">Limpar tudo</button>
+</div>
+<nav class="tabs" id="tabs">
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="kpis">KPIs</button>
+  <button data-tab="inputs">Inputs Diários</button>
+  <button data-tab="leads">Leads Closum</button>
+  <button data-tab="visitas">Visitas dia seg.</button>
+  <button data-tab="comerciais">Comerciais</button>
+  <button data-tab="onboarding">Onboarding 30d</button>
+  <button data-tab="tarefas">Tarefas</button>
+  <button data-tab="reunioes-d">Reun. diárias</button>
+  <button data-tab="reunioes-s">Reun. semanais</button>
+  <button data-tab="reunioes-m">Reun. mensais</button>
+  <button data-tab="kpisM">KPIs mensais</button>
+  <button data-tab="socios">Sócios</button>
+  <button data-tab="cancelamentos">Cancelamentos</button>
+  <button data-tab="config">⚙ Definições</button>
+</nav>
+<main>
+  <section class="panel active" id="panel-dashboard">
+    <h2 class="section">KPIs do período</h2>
+    <div class="grid c4" id="kpi-cards-1"></div>
+    <div class="grid c4" id="kpi-cards-2" style="margin-top:14px"></div>
+    <h2 class="section">Alertas — KPI vs Meta</h2>
+    <div class="alerts" id="dash-alerts"></div>
+    <h2 class="section">Performance por comercial</h2>
+    <div id="dash-com"></div>
+    <div class="grid c2" style="margin-top:18px">
+      <div class="chart-wrap"><canvas id="chart-funil"></canvas></div>
+      <div class="chart-wrap"><canvas id="chart-sla"></canvas></div>
+    </div>
+    <h2 class="section">Visitas do dia seguinte (próximas)</h2>
+    <div id="dash-visitas"></div>
+    <h2 class="section">Tarefas em curso e bloqueadas</h2>
+    <div id="dash-tarefas"></div>
+  </section>
+  <section class="panel" id="panel-kpis">
+    <h2 class="section">KPIs detalhados — agregação por comercial</h2>
+    <div id="kpis-detail"></div>
+    <h2 class="section">Distribuição SLA das leads</h2>
+    <div class="chart-wrap"><canvas id="chart-sla-detail"></canvas></div>
+  </section>
+  <section class="panel" id="panel-inputs">
+    <h2 class="section">Inputs Diários<span class="actions"><button onclick="addRow('inputs')" class="primary">+ Adicionar linha</button></span></h2>
+    <div id="t-inputs"></div>
+  </section>
+  <section class="panel" id="panel-leads">
+    <div class="grid c3">
+      <div class="kpi"><div class="lbl">Leads totais</div><div class="val" id="lead-total">—</div><div class="sub">Filtros aplicados</div></div>
+      <div class="kpi good"><div class="lbl">SLA cumprido</div><div class="val" id="lead-ok">—</div><div class="sub">≤ 60 min</div></div>
+      <div class="kpi bad"><div class="lbl">SLA violado / sem contacto</div><div class="val" id="lead-bad">—</div><div class="sub">Acção imediata</div></div>
+    </div>
+    <h2 class="section">Leads (tempo de resposta automático)<span class="actions"><button onclick="addRow('leads')" class="primary">+ Adicionar lead</button></span></h2>
+    <div id="t-leads"></div>
+  </section>
+  <section class="panel" id="panel-visitas">
+    <h2 class="section">Visitas do dia seguinte<span class="actions"><button onclick="addRow('visitas')" class="primary">+ Adicionar visita</button></span></h2>
+    <div id="t-visitas"></div>
+  </section>
+  <section class="panel" id="panel-comerciais">
+    <h2 class="section">Performance individual (auto-agregada)</h2>
+    <div id="com-perf"></div>
+    <div class="chart-wrap" style="margin-top:18px"><canvas id="chart-com"></canvas></div>
+  </section>
+  <section class="panel" id="panel-onboarding">
+    <div class="grid c3">
+      <div class="kpi"><div class="lbl">Em onboarding</div><div class="val" id="ob-total">—</div><div class="sub">Total</div></div>
+      <div class="kpi warn"><div class="lbl">Em risco</div><div class="val" id="ob-risk">—</div><div class="sub">Checkpoint falhado</div></div>
+      <div class="kpi bad"><div class="lbl">Cancelados nos 30d</div><div class="val" id="ob-cancel">—</div><div class="sub">Estado: cancelado</div></div>
+    </div>
+    <h2 class="section">Pós-venda 24h / 7d / 30d<span class="actions"><button onclick="addRow('onboarding')" class="primary">+ Adicionar cliente</button></span></h2>
+    <div id="t-onboarding"></div>
+  </section>
+  <section class="panel" id="panel-tarefas">
+    <h2 class="section">Tarefas — kanban<span class="actions"><button onclick="addRow('tarefas')" class="primary">+ Nova tarefa</button></span></h2>
+    <div class="kanban" id="kanban"></div>
+    <h2 class="section">Tabela completa</h2>
+    <div id="t-tarefas"></div>
+  </section>
+  <section class="panel" id="panel-reunioes-d">
+    <div class="meet-tpl">
+      <h3>Reunião diária (10–15 min) · Foco: execução</h3>
+      <div class="desc">Output esperado: prioridades e bloqueios resolvidos. Adiciona notas a falar e marca o check quando for discutido.</div>
+      <ul>
+        <li><strong>1. Performance dia anterior:</strong> contactos, conversões, incidentes críticos.</li>
+        <li><strong>2. Estado da operação:</strong> riscos identificados e como atacá-los.</li>
+        <li><strong>3. Prioridades do dia:</strong> 3 máximas, com ações.</li>
+        <li><strong>4. Bloqueios:</strong> problemas, dependências, decisões.</li>
+      </ul>
+      <div class="meet-rule">Disciplina: dados preparados antes · termina com ação definida.</div>
+    </div>
+    <h2 class="section">Log das reuniões diárias<span class="actions"><button onclick="addRow('reunioesD')" class="primary">+ Nova reunião</button></span></h2>
+    <div id="t-reunioesD"></div>
+  </section>
+  <section class="panel" id="panel-reunioes-s">
+    <div class="meet-tpl">
+      <h3>Reunião semanal · Foco: correção</h3>
+      <div class="desc">Output obrigatório: plano de correção semanal formalizado + ações atribuídas.</div>
+      <ul>
+        <li><strong>Análise de KPIs:</strong> Real vs objetivo + tendência vs semana anterior.</li>
+        <li><strong>Revisão de pipeline.</strong></li>
+        <li><strong>Identificação de desvios.</strong></li>
+        <li><strong>Plano de ação corretivo.</strong></li>
+      </ul>
+      <div class="meet-rule">Nenhum KPI é analisado sem comparação temporal · Nenhum desvio fica sem plano de ação.</div>
+    </div>
+    <h2 class="section">Log das reuniões semanais<span class="actions"><button onclick="addRow('reunioesS')" class="primary">+ Nova reunião</button></span></h2>
+    <div id="t-reunioesS"></div>
+  </section>
+  <section class="panel" id="panel-reunioes-m">
+    <div class="meet-tpl">
+      <h3>Reunião mensal · Foco: evolução</h3>
+      <div class="desc">Output obrigatório: relatório de performance + decisões + plano do mês seguinte.</div>
+      <ul>
+        <li><strong>Performance global e tendências.</strong></li>
+        <li><strong>Avaliação de equipa:</strong> performance individual, consistência, formação.</li>
+        <li><strong>Ajustes operacionais e definição de melhorias.</strong></li>
+      </ul>
+      <div class="meet-rule">Diário → execução · Semanal → correção · Mensal → evolução.</div>
+    </div>
+    <h2 class="section">Reuniões mensais<span class="actions"><button onclick="addRow('reunioesM')" class="primary">+ Nova reunião</button></span></h2>
+    <div id="t-reunioesM"></div>
+  </section>
+  <section class="panel" id="panel-kpisM">
+    <h2 class="section">KPIs mensais — histórico<span class="actions"><button onclick="addRow('kpisM')" class="primary">+ Adicionar registo</button></span></h2>
+    <div id="t-kpisM"></div>
+  </section>
+  <section class="panel" id="panel-socios">
+    <h2 class="section">Sócios — visão estatística do mês mais recente</h2>
+    <div class="grid c4" id="socios-cards"></div>
+    <h2 class="section">Crescimento / Churn / Retenção por unidade<span class="actions"><button onclick="addRow('socios')" class="primary">+ Adicionar período</button></span></h2>
+    <div id="t-socios"></div>
+    <div class="grid c2" style="margin-top:18px">
+      <div class="chart-wrap"><canvas id="chart-socios-evol"></canvas></div>
+      <div class="chart-wrap"><canvas id="chart-socios-churn"></canvas></div>
+    </div>
+  </section>
+  <section class="panel" id="panel-cancelamentos">
+    <div style="background:white;border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;font-size:12px;color:var(--grey);line-height:1.6">
+      Anexa aqui o ficheiro Excel ou PDF com os cancelamentos do período (mensal ou semanal) para cada unidade. Para estatística agregada usa a aba <strong>Sócios</strong>.
+    </div>
+    <h2 class="section">Cancelamentos — registos mensais/semanais por unidade<span class="actions"><button onclick="addRow('cancelamentos')" class="primary">+ Adicionar registo</button></span></h2>
+    <div id="t-cancelamentos"></div>
+  </section>
+  <section class="panel" id="panel-config">
+    <h2 class="section">Equipa<span class="actions"><button onclick="addRow('equipa')" class="primary">+ Adicionar membro</button></span></h2>
+    <div id="t-equipa"></div>
+    <h2 class="section">Metas dos KPIs<span class="actions"><button onclick="addRow('metas')" class="primary">+ Adicionar KPI</button><button onclick="resetMetas()">Reset defaults</button></span></h2>
+    <div id="t-metas"></div>
+    <h2 class="section">Backup & Reset</h2>
+    <div style="background:white;border:1px solid var(--line);border-radius:10px;padding:18px;font-size:13px;line-height:1.7">
+      <p><strong>Os teus dados estão guardados localmente</strong> no navegador (localStorage). Não saem do teu computador. Se mudares de máquina ou navegador, exporta o backup primeiro.</p>
+      <p><strong>Exportar XLSX</strong> gera um workbook com todas as abas para partilhar com a Direção ou ter como cópia de segurança.</p>
+      <p><strong>Backup JSON</strong> é o método recomendado para clonar o estado para outra máquina.</p>
+    </div>
+  </section>
+</main>
+<div class="footer">The Code · Coordenação Comercial e Operacional · v2.1 · Dados locais</div>
+<div class="modal-bg" id="modal-bg">
+  <div class="modal" id="modal">
+    <h3 id="modal-title"></h3>
+    <p id="modal-body"></p>
+    <div class="actions" id="modal-actions"></div>
+  </div>
+</div>
+<script>
+"use strict";
+if (typeof structuredClone === 'undefined') { window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj)); }
+const UNIDADES = ["Cidade Universitária", "Saldanha", "Universidade Nova"];
+const PLANOS = ["ONE", "OFFPEAK", "PLUS", "Outro"];
+const ESTADO_VISITA = ["Confirmada", "Não confirmada", "Realizada", "Não compareceu"];
+const RESULTADO_VISITA = ["Adesão", "Não adesão", "Pendente"];
+const ESTADO_LEAD_RES = ["Marcou visita", "Não interessado", "Sem resposta", "Adesão", "Pendente"];
+const SN = ["Sim", "Não", "N/A"];
+const CHECK = ["Feito", "Não feito", "Não aplicável"];
+const ESTADO_30D = ["Ativo", "Em risco", "Cancelado"];
+const TENDENCIA = ["Subir", "Estável", "Descer"];
+const KPI_LIST = ["Tempo médio resp. (min)","% Chamadas atendidas","% Walk-in sale","% Contactos angariados","% Leads recebidas","% Contactos / marcações","% Marcações / visitas","% Visitas / conversão"];
+const TASK_STATUS = ["A fazer", "Em curso", "Bloqueada", "Feita"];
+const TASK_PRIO = ["Alta", "Média", "Baixa"];
+
+const SCHEMA = {
+  equipa: { label: "Equipa", fields: [
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 180 },
+    { key: "comercial", label: "Comercial", type: "text", w: 200 },
+    { key: "email", label: "Email", type: "text", w: 220 },
+    { key: "dataInicio", label: "Data início", type: "date", w: 120 },
+    { key: "estado", label: "Estado", type: "select", options: ["Ativo","Inativo"], w: 100 },
+  ]},
+  metas: { label: "Metas KPIs", fields: [
+    { key: "kpi", label: "KPI", type: "text", w: 280 },
+    { key: "min", label: "Meta mínima", type: "text", w: 110 },
+    { key: "std", label: "Meta standard", type: "text", w: 120 },
+    { key: "exc", label: "Meta excelência", type: "text", w: 130 },
+    { key: "notas", label: "Notas", type: "text", w: 280 },
+  ]},
+  inputs: { label: "Inputs Diários", fields: [
+    { key: "data", label: "Data", type: "date", w: 110 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 180 },
+    { key: "comercial", label: "Comercial", type: "select", source: "comerciais", w: 180 },
+    { key: "chamadasEf", label: "Cham. ef.", type: "number", w: 90 },
+    { key: "chamadasAt", label: "Cham. at.", type: "number", w: 90 },
+    { key: "walkin", label: "Walk-in", type: "number", w: 80 },
+    { key: "walkinSale", label: "WI sale", type: "number", w: 80 },
+    { key: "contAng", label: "Cont. ang.", type: "number", w: 95 },
+    { key: "leadsRec", label: "Leads rec.", type: "number", w: 95 },
+    { key: "marc", label: "Marcações", type: "number", w: 95 },
+    { key: "visitas", label: "Visitas", type: "number", w: 80 },
+    { key: "conv", label: "Conversões", type: "number", w: 100 },
+    { key: "notas", label: "Notas", type: "textarea", w: 200 },
+  ]},
+  leads: { label: "Leads Closum", fields: [
+    { key: "leadId", label: "ID", type: "text", w: 90 },
+    { key: "nome", label: "Nome", type: "text", w: 180 },
+    { key: "telefone", label: "Telefone", type: "text", w: 120 },
+    { key: "origem", label: "Origem", type: "text", w: 130 },
+    { key: "dataEntrada", label: "Entrada Closum", type: "datetime", w: 170 },
+    { key: "comercial", label: "Comercial", type: "select", source: "comerciais", w: 170 },
+    { key: "dataPrimeiroContacto", label: "1º contacto", type: "datetime", w: 170 },
+    { key: "canal", label: "Canal", type: "text", w: 100 },
+    { key: "_tempoResp", label: "Tempo resp. (min)", type: "computed", w: 110, compute: r => computeTempoResp(r) },
+    { key: "_sla", label: "SLA", type: "computedBadge", w: 100, compute: r => computeSLA(r) },
+    { key: "resultado", label: "Resultado", type: "select", options: ESTADO_LEAD_RES, w: 140 },
+    { key: "notas", label: "Notas", type: "textarea", w: 200 },
+  ]},
+  visitas: { label: "Visitas dia seguinte", fields: [
+    { key: "data", label: "Data", type: "date", w: 110 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "comercial", label: "Comercial", type: "select", source: "comerciais", w: 170 },
+    { key: "hora", label: "Hora", type: "time", w: 80 },
+    { key: "cliente", label: "Cliente", type: "text", w: 180 },
+    { key: "telefone", label: "Telefone", type: "text", w: 120 },
+    { key: "origem", label: "Origem lead", type: "text", w: 140 },
+    { key: "plano", label: "Plano interesse", type: "select", options: PLANOS, w: 130 },
+    { key: "estado", label: "Estado", type: "select", options: ESTADO_VISITA, w: 150 },
+    { key: "resultado", label: "Resultado", type: "select", options: RESULTADO_VISITA, w: 130 },
+    { key: "notas", label: "Notas", type: "textarea", w: 200 },
+  ]},
+  onboarding: { label: "Onboarding 30d", fields: [
+    { key: "cliente", label: "Cliente", type: "text", w: 180 },
+    { key: "dataAdesao", label: "Data adesão", type: "date", w: 110 },
+    { key: "comercial", label: "Comercial", type: "select", source: "comerciais", w: 170 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "plano", label: "Plano", type: "select", options: PLANOS, w: 100 },
+    { key: "c24h", label: "Contacto 24h", type: "select", options: CHECK, w: 130 },
+    { key: "v7d", label: "Visita 7d", type: "select", options: CHECK, w: 130 },
+    { key: "av30d", label: "Avaliação 30d", type: "select", options: CHECK, w: 130 },
+    { key: "estado", label: "Estado 30d", type: "select", options: ESTADO_30D, w: 110 },
+    { key: "_risco", label: "Risco?", type: "computedBadge", w: 90, compute: r => computeRisco(r) },
+    { key: "notas", label: "Notas", type: "textarea", w: 200 },
+  ]},
+  cancelamentos: { label: "Cancelamentos — registos mensais/semanais", fields: [
+    { key: "periodo", label: "Período (Mês ou Semana)", type: "text", w: 160 },
+    { key: "tipo", label: "Tipo", type: "select", options: ["Mensal","Semanal"], w: 110 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "nCancelamentos", label: "Nº cancelamentos", type: "number", w: 130 },
+    { key: "ficheiro", label: "Ficheiro (Excel/PDF)", type: "file", w: 220 },
+    { key: "notas", label: "Notas", type: "textarea", w: 240 },
+  ]},
+  socios: { label: "Sócios — estatística mensal", fields: [
+    { key: "periodo", label: "Período (AAAA-MM)", type: "text", w: 130 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "ativosInicio", label: "Ativos início", type: "number", w: 110 },
+    { key: "novasInsc", label: "Novas inscrições", type: "number", w: 130 },
+    { key: "cancelamentos", label: "Cancelamentos", type: "number", w: 120 },
+    { key: "_ativosFim", label: "Ativos fim", type: "computed", w: 100, compute: r => computeSociosFim(r) },
+    { key: "_crescimento", label: "Crescimento %", type: "computedBadge", w: 110, compute: r => computeCrescimento(r) },
+    { key: "_churn", label: "Churn %", type: "computedBadge", w: 100, compute: r => computeChurn(r) },
+    { key: "_retencao", label: "Retenção %", type: "computedBadge", w: 100, compute: r => computeRetencao(r) },
+    { key: "notas", label: "Notas", type: "textarea", w: 200 },
+  ]},
+  reunioesD: { label: "Reuniões diárias", fields: [
+    { key: "data", label: "Data", type: "date", w: 110 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "agenda", label: "Notas a falar (com check)", type: "agenda", w: 360 },
+    { key: "perfDiaAnt", label: "Performance dia anterior", type: "textarea", w: 240 },
+    { key: "riscos", label: "Riscos da operação", type: "textarea", w: 220 },
+    { key: "prioridades", label: "3 Prioridades do dia", type: "textarea", w: 240 },
+    { key: "acoes", label: "Ações sobre prioridades", type: "textarea", w: 240 },
+    { key: "bloqueios", label: "Bloqueios", type: "textarea", w: 220 },
+    { key: "output", label: "Output definido", type: "textarea", w: 220 },
+  ]},
+  reunioesS: { label: "Reuniões semanais", fields: [
+    { key: "semana", label: "Semana (dd/mm)", type: "text", w: 130 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "agenda", label: "Notas a falar (com check)", type: "agenda", w: 360 },
+    { key: "kpisRealMeta", label: "KPIs Real vs Meta", type: "textarea", w: 240 },
+    { key: "tendencia", label: "Tendência vs sem. ant.", type: "textarea", w: 220 },
+    { key: "pipeline", label: "Pipeline status", type: "textarea", w: 220 },
+    { key: "desvios", label: "Desvios", type: "textarea", w: 220 },
+    { key: "planoCorrecao", label: "Plano de correção", type: "textarea", w: 240 },
+    { key: "acoes", label: "Ações atribuídas", type: "textarea", w: 240 },
+    { key: "responsavelPrazo", label: "Responsável | Prazo", type: "text", w: 200 },
+  ]},
+  reunioesM: { label: "Reuniões mensais", fields: [
+    { key: "mes", label: "Mês", type: "text", w: 110 },
+    { key: "agenda", label: "Notas a falar (com check)", type: "agenda", w: 360 },
+    { key: "perfGlobal", label: "Performance global", type: "textarea", w: 240 },
+    { key: "tendencias", label: "Tendências", type: "textarea", w: 220 },
+    { key: "avalEquipa", label: "Avaliação equipa", type: "textarea", w: 220 },
+    { key: "decisoes", label: "Decisões registadas", type: "textarea", w: 240 },
+    { key: "ajustes", label: "Ajustes operacionais", type: "textarea", w: 220 },
+    { key: "planoMesSeguinte", label: "Plano mês seguinte", type: "textarea", w: 240 },
+  ]},
+  kpisM: { label: "KPIs mensais", fields: [
+    { key: "mes", label: "Mês", type: "text", w: 100 },
+    { key: "unidade", label: "Unidade", type: "select", options: UNIDADES, w: 170 },
+    { key: "kpi", label: "KPI", type: "select", options: KPI_LIST, w: 200 },
+    { key: "real", label: "Real", type: "number", w: 100 },
+    { key: "meta", label: "Meta", type: "number", w: 100 },
+    { key: "_desvio", label: "Desvio", type: "computed", w: 90, compute: r => (r.real != null && r.meta != null) ? (r.real - r.meta).toFixed(1) : "" },
+    { key: "tendencia", label: "Tendência", type: "select", options: TENDENCIA, w: 110 },
+    { key: "planoAcao", label: "Plano de ação", type: "textarea", w: 280 },
+  ]},
+  tarefas: { label: "Tarefas", fields: [
+    { key: "titulo", label: "Título", type: "text", w: 220 },
+    { key: "descricao", label: "Descrição", type: "textarea", w: 280 },
+    { key: "responsavel", label: "Responsável", type: "select", source: "comerciaisAndCoord", w: 170 },
+    { key: "unidade", label: "Unidade", type: "select", options: ["Geral", ...UNIDADES], w: 170 },
+    { key: "prioridade", label: "Prioridade", type: "select", options: TASK_PRIO, w: 110 },
+    { key: "estado", label: "Estado", type: "select", options: TASK_STATUS, w: 130 },
+    { key: "prazo", label: "Prazo", type: "date", w: 120 },
+    { key: "criadoEm", label: "Criado em", type: "date", w: 120 },
+  ]},
+};
+const DEFAULT_EQUIPA = [
+  { unidade: "Cidade Universitária", comercial: "[Nome do comercial CU]", email: "", dataInicio: "", estado: "Ativo" },
+  { unidade: "Saldanha", comercial: "[Nome do comercial SD]", email: "", dataInicio: "", estado: "Ativo" },
+  { unidade: "Universidade Nova", comercial: "[Nome do comercial UN]", email: "", dataInicio: "", estado: "Ativo" },
+];
+const DEFAULT_METAS = [
+  { kpi: "Tempo médio contacto a lead nova (min)", min: "90", std: "60", exc: "30", notas: "SLA manual: 1h" },
+  { kpi: "% Chamadas atendidas", min: "30%", std: "40%", exc: "55%", notas: "Atendidas / Efetuadas" },
+  { kpi: "% Walk-in sale", min: "20%", std: "30%", exc: "45%", notas: "Walk-in sale / Walk-in" },
+  { kpi: "% Contactos angariados", min: "—", std: "—", exc: "—", notas: "Definir base" },
+  { kpi: "% Leads recebidas (qualificadas)", min: "—", std: "—", exc: "—", notas: "Definir base" },
+  { kpi: "% Contactos / marcações", min: "25%", std: "35%", exc: "50%", notas: "Marcações / contactos efetivos" },
+  { kpi: "% Marcações / visitas", min: "60%", std: "75%", exc: "90%", notas: "Visitas / Marcações" },
+  { kpi: "% Visitas / conversão", min: "30%", std: "45%", exc: "60%", notas: "Vendas / Visitas" },
+];
+const META_NUM = { tempo_min: 90, tempo_std: 60, cham_at_min: 0.30, cham_at_std: 0.40, wi_min: 0.20, wi_std: 0.30, cm_min: 0.25, cm_std: 0.35, mv_min: 0.60, mv_std: 0.75, vc_min: 0.30, vc_std: 0.45 };
+
+const STORAGE_KEY = "thecode_workflow_v21";
+let state = {
+  equipa: structuredClone(DEFAULT_EQUIPA),
+  metas: structuredClone(DEFAULT_METAS),
+  inputs: [], leads: [], visitas: [], onboarding: [],
+  cancelamentos: [], socios: [],
+  reunioesD: [], reunioesS: [], reunioesM: [],
+  kpisM: [], tarefas: [],
+};
+let filters = { unit: "", com: "", period: "" };
+let charts = {};
+let saveTimer = null;
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) { const p = JSON.parse(raw); Object.keys(state).forEach(k => { if (p[k]) state[k] = p[k]; }); }
+  } catch (e) { console.warn("Falha localStorage:", e); }
+}
+function saveState() {
+  clearTimeout(saveTimer);
+  document.getElementById("save-status").textContent = "A guardar...";
+  document.getElementById("save-status").classList.remove("saved");
+  saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      document.getElementById("save-status").textContent = "✓ Guardado às " + new Date().toLocaleTimeString("pt-PT");
+      document.getElementById("save-status").classList.add("saved");
+    } catch (e) { document.getElementById("save-status").textContent = "⚠ Erro ao guardar"; }
+  }, 250);
+}
+
+function computeTempoResp(r) {
+  if (!r.dataEntrada || !r.dataPrimeiroContacto) return "";
+  const e = new Date(r.dataEntrada), p = new Date(r.dataPrimeiroContacto);
+  if (isNaN(e) || isNaN(p)) return "";
+  const m = Math.round((p - e) / 60000);
+  return m < 0 ? "" : m;
+}
+function computeSLA(r) {
+  const t = computeTempoResp(r);
+  if (!r.dataEntrada) return "";
+  if (t === "" || t === null || t === undefined) return r.dataEntrada ? "Sem contacto" : "";
+  return t <= 60 ? "OK" : "VIOLADO";
+}
+function computeRisco(r) { return (r.c24h === "Não feito" || r.v7d === "Não feito" || r.estado === "Em risco") ? "⚠ SIM" : ""; }
+function computeSociosFim(r) {
+  return (Number(r.ativosInicio)||0) + (Number(r.novasInsc)||0) - (Number(r.cancelamentos)||0);
+}
+function computeCrescimento(r) {
+  const i = Number(r.ativosInicio)||0; if (!i) return "";
+  const v = (((Number(r.novasInsc)||0) - (Number(r.cancelamentos)||0)) / i) * 100;
+  return (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+}
+function computeChurn(r) {
+  const i = Number(r.ativosInicio)||0; if (!i) return "";
+  return (((Number(r.cancelamentos)||0) / i) * 100).toFixed(1) + "%";
+}
+function computeRetencao(r) {
+  const i = Number(r.ativosInicio)||0; if (!i) return "";
+  return ((1 - (Number(r.cancelamentos)||0) / i) * 100).toFixed(1) + "%";
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function getDynamicOptions(source) {
+  if (source === "comerciais") return state.equipa.map(e => e.comercial).filter(Boolean);
+  if (source === "comerciaisAndCoord") return ["Coordenação", ...state.equipa.map(e => e.comercial).filter(Boolean)];
+  return [];
+}
+function badgeClass(v) {
+  if (!v) return "";
+  if (v === "OK") return "cell-good";
+  if (v === "VIOLADO" || String(v).includes("SIM")) return "cell-bad";
+  if (v === "Sem contacto") return "cell-warn";
+  if (typeof v === "string" && v.endsWith("%")) {
+    const n = parseFloat(v.replace("+","").replace("%",""));
+    if (isNaN(n)) return "";
+  }
+  return "";
+}
+function computeRowClass(schemaKey, row) {
+  if (schemaKey === "leads") {
+    const sla = computeSLA(row);
+    if (sla === "OK") return "cell-good";
+    if (sla === "VIOLADO") return "cell-bad";
+    if (sla === "Sem contacto") return "cell-warn";
+  }
+  if (schemaKey === "tarefas") {
+    if (row.estado === "Bloqueada") return "cell-bad";
+    if (row.estado === "Feita") return "cell-good";
+  }
+  if (schemaKey === "onboarding" && computeRisco(row)) return "cell-bad";
+  return "";
+}
+function formatForInput(v, type) {
+  if (v === null || v === undefined || v === "") return "";
+  if (type === "datetime") { const d = new Date(v); return isNaN(d) ? v : d.toISOString().slice(0,16); }
+  if (type === "date") { const d = new Date(v); return isNaN(d) ? v : d.toISOString().slice(0,10); }
+  return v;
+}
+function renderCell(schemaKey, idx, field, row) {
+  const v = row[field.key] ?? "";
+  const cellId = schemaKey + "-" + idx + "-" + field.key;
+  if (field.type === "computed") {
+    const c = field.compute ? field.compute(row) : "";
+    return '<td class="computed" id="' + cellId + '">' + escapeHtml(String(c)) + '</td>';
+  }
+  if (field.type === "computedBadge") {
+    const c = field.compute ? field.compute(row) : "";
+    return '<td class="' + badgeClass(c) + '" id="' + cellId + '">' + escapeHtml(String(c)) + '</td>';
+  }
+  if (field.type === "agenda") {
+    const items = row[field.key] || [];
+    let h = '<td class="agenda-cell"><div class="agenda-list">';
+    items.forEach((it, ai) => {
+      const done = it.discutido ? 'done' : '';
+      const ch = it.discutido ? 'checked' : '';
+      h += '<div class="agenda-item ' + done + '">';
+      h += '<input type="checkbox" ' + ch + ' onchange="updateAgendaItem(\'' + schemaKey + '\',' + idx + ',' + ai + ',\'discutido\',this.checked)">';
+      h += '<input type="text" value="' + escapeHtml(it.texto || '') + '" oninput="updateAgendaItem(\'' + schemaKey + '\',' + idx + ',' + ai + ',\'texto\',this.value)" placeholder="Nota a falar...">';
+      h += '<button class="btn-icon" title="Eliminar" onclick="removeAgendaItem(\'' + schemaKey + '\',' + idx + ',' + ai + ')">✕</button>';
+      h += '</div>';
+    });
+    h += '<button class="btn-add-agenda" onclick="addAgendaItem(\'' + schemaKey + '\',' + idx + ')">+ adicionar nota</button>';
+    h += '</div></td>';
+    return h;
+  }
+  if (field.type === "file") {
+    const f = row[field.key];
+    if (f && f.dataUrl) {
+      const sz = (f.size / 1024).toFixed(0) + " KB";
+      return '<td class="file-cell"><a href="' + f.dataUrl + '" download="' + escapeHtml(f.name) + '" class="file-link">📎 ' + escapeHtml(f.name) + '</a><span class="file-meta">' + sz + ' · ' + (f.uploadedAt || '') + '</span><button class="btn-icon" title="Remover" onclick="clearFile(\'' + schemaKey + '\',' + idx + ',\'' + field.key + '\')">✕</button></td>';
+    }
+    return '<td class="file-cell"><input type="file" accept=".xlsx,.xls,.pdf,.csv" onchange="uploadFile(this,\'' + schemaKey + '\',' + idx + ',\'' + field.key + '\')"></td>';
+  }
+  if (field.type === "select") {
+    const opts = field.source ? getDynamicOptions(field.source) : (field.options || []);
+    let h = '<td><select onchange="updateCell(\'' + schemaKey + '\',' + idx + ',\'' + field.key + '\',this.value)">';
+    h += '<option value=""></option>';
+    opts.forEach(o => {
+      const sel = String(o) === String(v) ? "selected" : "";
+      h += '<option value="' + escapeHtml(String(o)) + '" ' + sel + '>' + escapeHtml(String(o)) + '</option>';
+    });
+    h += '</select></td>';
+    return h;
+  }
+  if (field.type === "textarea") {
+    return '<td><textarea oninput="updateCell(\'' + schemaKey + '\',' + idx + ',\'' + field.key + '\',this.value)" rows="1" style="min-height:32px">' + escapeHtml(String(v)) + '</textarea></td>';
+  }
+  const itype = { number: "number", date: "date", datetime: "datetime-local", time: "time" }[field.type] || "text";
+  const cls = field.type === "number" ? "num" : "";
+  return '<td class="' + cls + '"><input type="' + itype + '" value="' + escapeHtml(String(formatForInput(v, field.type))) + '" oninput="updateCell(\'' + schemaKey + '\',' + idx + ',\'' + field.key + '\',this.value)"></td>';
+}
+function matchPeriod(dateStr, period) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr); if (isNaN(d)) return false;
+  const now = new Date();
+  if (period === "hoje") return d.toDateString() === now.toDateString();
+  if (period === "semana") { const s = new Date(now); s.setDate(now.getDate() - now.getDay()); s.setHours(0,0,0,0); return d >= s; }
+  if (period === "mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === "30d") { const a = new Date(now); a.setDate(now.getDate() - 30); return d >= a; }
+  return true;
+}
+function applyTableFilter(rows, schemaKey, search) {
+  const out = [];
+  rows.forEach((row, idx) => {
+    if (filters.unit && row.unidade && row.unidade !== filters.unit) return;
+    if (filters.com && row.comercial && row.comercial !== filters.com) return;
+    if (filters.com && row.responsavel && row.responsavel !== filters.com) return;
+    if (filters.period && row.data && !matchPeriod(row.data, filters.period)) return;
+    if (search) { if (!JSON.stringify(row).toLowerCase().includes(search.toLowerCase())) return; }
+    out.push({ row, idx });
+  });
+  return out;
+}
+function renderTable(containerId, schemaKey, opts) {
+  opts = opts || {};
+  const c = document.getElementById(containerId); if (!c) return;
+  const sch = SCHEMA[schemaKey];
+  const rows = state[schemaKey] || [];
+  const search = opts.search || "";
+  const filtered = applyTableFilter(rows, schemaKey, search);
+  let html = '<div class="tbl-wrap">';
+  html += '<div class="tbl-search"><input placeholder="Filtrar..." value="' + escapeHtml(search) + '" oninput="renderTable(\'' + containerId + '\',\'' + schemaKey + '\',{search:this.value})"><span class="count">' + filtered.length + ' de ' + rows.length + '</span></div>';
+  html += '<table class="tbl"><thead><tr>';
+  sch.fields.forEach(f => { html += '<th style="min-width:' + (f.w || 100) + 'px">' + f.label + '</th>'; });
+  html += '<th class="act">·</th></tr></thead><tbody>';
+  if (filtered.length === 0) {
+    html += '<tr><td colspan="' + (sch.fields.length + 1) + '" class="empty" style="border:none">Sem registos. Clica "+ Adicionar" para começar.</td></tr>';
+  } else {
+    filtered.forEach(({row, idx}) => {
+      html += '<tr class="' + computeRowClass(schemaKey, row) + '">';
+      sch.fields.forEach(f => { html += renderCell(schemaKey, idx, f, row); });
+      html += '<td class="act"><button class="btn-icon dup" title="Duplicar" onclick="duplicateRow(\'' + schemaKey + '\',' + idx + ')">⎘</button><button class="btn-icon" title="Eliminar" onclick="deleteRow(\'' + schemaKey + '\',' + idx + ')">✕</button></td>';
+      html += '</tr>';
+    });
+  }
+  html += '</tbody></table></div>';
+  c.innerHTML = html;
+}
+
+function updateCell(schemaKey, idx, key, value) {
+  if (!state[schemaKey][idx]) return;
+  const sch = SCHEMA[schemaKey];
+  const f = sch.fields.find(x => x.key === key);
+  if (f && f.type === "number") state[schemaKey][idx][key] = value === "" ? null : Number(value);
+  else state[schemaKey][idx][key] = value;
+  saveState();
+  if (schemaKey === "leads" && (key === "dataEntrada" || key === "dataPrimeiroContacto")) {
+    const t = computeTempoResp(state[schemaKey][idx]);
+    const sla = computeSLA(state[schemaKey][idx]);
+    const tc = document.getElementById(schemaKey + "-" + idx + "-_tempoResp");
+    const sc = document.getElementById(schemaKey + "-" + idx + "-_sla");
+    if (tc) tc.textContent = String(t);
+    if (sc) { sc.textContent = String(sla); sc.className = badgeClass(sla); }
+  }
+  if (schemaKey === "onboarding" && ["c24h","v7d","estado"].includes(key)) {
+    const r = computeRisco(state[schemaKey][idx]);
+    const cell = document.getElementById(schemaKey + "-" + idx + "-_risco");
+    if (cell) { cell.textContent = String(r); cell.className = badgeClass(r); }
+  }
+  if (schemaKey === "socios" && ["ativosInicio","novasInsc","cancelamentos"].includes(key)) {
+    renderAllForKey("socios");
+  }
+  if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
+  if (schemaKey === "tarefas") renderKanban();
+  if (schemaKey === "equipa") populateFilters();
+}
+function addRow(schemaKey) {
+  const r = {};
+  if (schemaKey === "tarefas") { r.estado = "A fazer"; r.prioridade = "Média"; r.criadoEm = new Date().toISOString().slice(0,10); }
+  if (["inputs","visitas","reunioesD"].includes(schemaKey)) r.data = new Date().toISOString().slice(0,10);
+  if (["reunioesD","reunioesS","reunioesM"].includes(schemaKey)) r.agenda = [];
+  state[schemaKey].push(r);
+  saveState();
+  renderAllForKey(schemaKey);
+}
+function deleteRow(schemaKey, idx) {
+  if (!confirm("Eliminar esta linha?")) return;
+  state[schemaKey].splice(idx, 1);
+  saveState(); renderAllForKey(schemaKey);
+}
+function duplicateRow(schemaKey, idx) {
+  state[schemaKey].splice(idx + 1, 0, JSON.parse(JSON.stringify(state[schemaKey][idx])));
+  saveState(); renderAllForKey(schemaKey);
+}
+function renderAllForKey(schemaKey) {
+  const map = { inputs:"t-inputs", leads:"t-leads", visitas:"t-visitas", onboarding:"t-onboarding", cancelamentos:"t-cancelamentos", socios:"t-socios", reunioesD:"t-reunioesD", reunioesS:"t-reunioesS", reunioesM:"t-reunioesM", kpisM:"t-kpisM", tarefas:"t-tarefas", equipa:"t-equipa", metas:"t-metas" };
+  if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
+  if (schemaKey === "tarefas") renderKanban();
+  if (schemaKey === "socios" && document.getElementById("panel-socios").classList.contains("active")) renderSociosPanel();
+  if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
+  if (document.getElementById("panel-kpis").classList.contains("active")) renderKPIsDetail();
+  if (document.getElementById("panel-comerciais").classList.contains("active")) renderComerciais();
+  if (document.getElementById("panel-leads").classList.contains("active")) renderLeadsPanel();
+  if (document.getElementById("panel-onboarding").classList.contains("active")) renderOnboardingPanel();
+}
+function resetMetas() {
+  if (!confirm("Repor metas para defaults?")) return;
+  state.metas = structuredClone(DEFAULT_METAS);
+  saveState(); renderTable("t-metas", "metas");
+}
+
+function addAgendaItem(schemaKey, idx) {
+  if (!state[schemaKey][idx].agenda) state[schemaKey][idx].agenda = [];
+  state[schemaKey][idx].agenda.push({ texto: "", discutido: false });
+  saveState(); renderAllForKey(schemaKey);
+}
+function updateAgendaItem(schemaKey, idx, ai, key, value) {
+  if (!state[schemaKey][idx].agenda) return;
+  state[schemaKey][idx].agenda[ai][key] = value;
+  saveState();
+  if (key === "discutido") renderAllForKey(schemaKey);
+}
+function removeAgendaItem(schemaKey, idx, ai) {
+  state[schemaKey][idx].agenda.splice(ai, 1);
+  saveState(); renderAllForKey(schemaKey);
+}
+function uploadFile(input, schemaKey, idx, key) {
+  const f = input.files[0]; if (!f) return;
+  if (f.size > 2 * 1024 * 1024) {
+    if (!confirm("Ficheiro de " + (f.size/1024/1024).toFixed(1) + "MB pode esgotar localStorage. Continuar?")) { input.value = ""; return; }
+  }
+  const r = new FileReader();
+  r.onload = (e) => {
+    state[schemaKey][idx][key] = { name: f.name, size: f.size, type: f.type, dataUrl: e.target.result, uploadedAt: new Date().toISOString().slice(0,10) };
+    saveState(); renderAllForKey(schemaKey);
+  };
+  r.readAsDataURL(f);
+}
+function clearFile(schemaKey, idx, key) {
+  if (!confirm("Remover ficheiro?")) return;
+  state[schemaKey][idx][key] = null;
+  saveState(); renderAllForKey(schemaKey);
+}
+
+function applyGlobalFilter(rows, uf, cf) {
+  uf = uf || "unidade"; cf = cf || "comercial";
+  return rows.filter(r => {
+    if (filters.unit && r[uf] && r[uf] !== filters.unit) return false;
+    if (filters.com && r[cf] && r[cf] !== filters.com) return false;
+    if (filters.period && r.data && !matchPeriod(r.data, filters.period)) return false;
+    return true;
+  });
+}
+function aggregateInputs() {
+  const rows = applyGlobalFilter(state.inputs);
+  const sum = k => rows.reduce((a,r) => a + (Number(r[k])||0), 0);
+  return { chamadasEf: sum("chamadasEf"), chamadasAt: sum("chamadasAt"), walkin: sum("walkin"), walkinSale: sum("walkinSale"), contAng: sum("contAng"), leadsRec: sum("leadsRec"), marc: sum("marc"), visitas: sum("visitas"), conv: sum("conv"), n: rows.length };
+}
+function aggregateLeads() {
+  let rows = state.leads;
+  if (filters.com) rows = rows.filter(r => r.comercial === filters.com);
+  if (filters.period) rows = rows.filter(r => r.dataEntrada && matchPeriod(String(r.dataEntrada).slice(0,10), filters.period));
+  const tempos = rows.map(r => computeTempoResp(r)).filter(t => t !== "" && t > 0);
+  const slaArr = rows.map(r => computeSLA(r));
+  const sla_ok = slaArr.filter(s => s === "OK").length;
+  const sla_bad = slaArr.filter(s => s === "VIOLADO").length;
+  const sla_none = slaArr.filter(s => s === "Sem contacto").length;
+  return { rows, tempo_medio: tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : 0, sla_ok, sla_bad, sla_none, total: rows.length };
+}
+function performancePorComercial() {
+  const out = [];
+  state.equipa.filter(e => e.estado !== "Inativo").forEach(eq => {
+    const com = eq.comercial;
+    const inputs = state.inputs.filter(r => r.comercial === com);
+    const inputsFilt = applyGlobalFilter(inputs);
+    const leads = state.leads.filter(r => r.comercial === com);
+    const tempos = leads.map(r => computeTempoResp(r)).filter(t => t !== "" && t > 0);
+    const sum = k => inputsFilt.reduce((a,r)=>a+(Number(r[k])||0),0);
+    const cE=sum("chamadasEf"),cA=sum("chamadasAt"),wi=sum("walkin"),wis=sum("walkinSale"),lR=sum("leadsRec"),mc=sum("marc"),vs=sum("visitas"),cv=sum("conv");
+    out.push({
+      comercial: com, unidade: eq.unidade,
+      chamadasEf: cE, chamadasAt: cA, pctAtend: cE ? cA/cE : 0,
+      walkin: wi, walkinSale: wis, pctWiSale: wi ? wis/wi : 0,
+      leadsRec: lR, marc: mc, visitas: vs, conv: cv, pctConv: vs ? cv/vs : 0,
+      tempoMedio: tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : 0,
+    });
+  });
+  return out;
+}
+
+function pct(v) { return ((v||0)*100).toFixed(1) + "%"; }
+function fmtDate(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString("pt-PT", { day:"2-digit", month:"2-digit" }); }
+function overdueCls(p) { if (!p) return false; return new Date(p) < new Date(new Date().toDateString()); }
+function cls(v, std, min) { if (!v) return "warn"; if (v >= std) return "good"; if (v >= min) return "warn"; return "bad"; }
+function clsInverse(v, std, min) { if (!v) return "warn"; if (v <= std) return "good"; if (v <= min) return "warn"; return "bad"; }
+function clsCell(v, std, min) { if (!v) return ""; if (v >= std) return "cell-good"; if (v >= min) return "cell-warn"; return "cell-bad"; }
+function clsCellInverse(v, std, min) { if (!v) return ""; if (v <= std) return "cell-good"; if (v <= min) return "cell-warn"; return "cell-bad"; }
+
+function renderPerfTable(perf) {
+  if (!perf.length) return '<div class="empty">Sem comerciais ativos. Edita Definições.</div>';
+  return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Comercial</th><th>Unidade</th><th>Cham. ef.</th><th>Cham. at.</th><th>% Atend.</th><th>WI</th><th>WI sale</th><th>% WI</th><th>Leads</th><th>T.médio</th><th>Visitas</th><th>Conv.</th><th>% Conv.</th></tr></thead><tbody>' +
+    perf.map(p => {
+      const cA = clsCell(p.pctAtend, META_NUM.cham_at_std, META_NUM.cham_at_min);
+      const cW = clsCell(p.pctWiSale, META_NUM.wi_std, META_NUM.wi_min);
+      const cC = clsCell(p.pctConv, META_NUM.vc_std, META_NUM.vc_min);
+      const cT = clsCellInverse(p.tempoMedio, META_NUM.tempo_std, META_NUM.tempo_min);
+      return '<tr><td style="padding:6px 10px"><strong>' + escapeHtml(p.comercial) + '</strong></td><td style="padding:6px 10px">' + escapeHtml(p.unidade||'') + '</td><td class="num" style="padding:6px 10px">' + p.chamadasEf + '</td><td class="num" style="padding:6px 10px">' + p.chamadasAt + '</td><td class="' + cA + '" style="padding:6px 10px;text-align:right">' + pct(p.pctAtend) + '</td><td class="num" style="padding:6px 10px">' + p.walkin + '</td><td class="num" style="padding:6px 10px">' + p.walkinSale + '</td><td class="' + cW + '" style="padding:6px 10px;text-align:right">' + pct(p.pctWiSale) + '</td><td class="num" style="padding:6px 10px">' + p.leadsRec + '</td><td class="' + cT + '" style="padding:6px 10px;text-align:right">' + (p.tempoMedio || "—") + '</td><td class="num" style="padding:6px 10px">' + p.visitas + '</td><td class="num" style="padding:6px 10px">' + p.conv + '</td><td class="' + cC + '" style="padding:6px 10px;text-align:right">' + pct(p.pctConv) + '</td></tr>';
+    }).join("") + '</tbody></table></div>';
+}
+
+function renderDashboard() {
+  const a = aggregateInputs(), l = aggregateLeads();
+  const cham = a.chamadasEf ? a.chamadasAt/a.chamadasEf : 0;
+  const wi = a.walkin ? a.walkinSale/a.walkin : 0;
+  const conv = a.visitas ? a.conv/a.visitas : 0;
+  const cards1 = [
+    { lbl: "Tempo médio resp.", val: l.tempo_medio + " min", sub: "Closum → 1º contacto", cls: clsInverse(l.tempo_medio, META_NUM.tempo_std, META_NUM.tempo_min) },
+    { lbl: "% Chamadas atendidas", val: pct(cham), sub: "Atendidas / efetuadas", cls: cls(cham, META_NUM.cham_at_std, META_NUM.cham_at_min) },
+    { lbl: "% Walk-in sale", val: pct(wi), sub: "Sale / Walk-in", cls: cls(wi, META_NUM.wi_std, META_NUM.wi_min) },
+    { lbl: "% Conversão visita", val: pct(conv), sub: "Conversões / visitas", cls: cls(conv, META_NUM.vc_std, META_NUM.vc_min) },
+  ];
+  const cards2 = [
+    { lbl: "Leads recebidas", val: a.leadsRec, sub: "Inputs lançados" },
+    { lbl: "Visitas realizadas", val: a.visitas, sub: "Inputs lançados" },
+    { lbl: "Conversões", val: a.conv, sub: "Vendas registadas" },
+    { lbl: "Leads SLA violado", val: l.sla_bad, sub: "Acima de 60 min", cls: l.sla_bad > 0 ? "bad" : "good" },
+  ];
+  const rc = (id, arr) => {
+    document.getElementById(id).innerHTML = arr.map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="lbl">' + c.lbl + '</div><div class="val">' + c.val + '</div><div class="sub">' + c.sub + '</div></div>').join("");
+  };
+  rc("kpi-cards-1", cards1); rc("kpi-cards-2", cards2);
+
+  const alerts = [
+    { kpi: "Tempo resp. médio", val: l.tempo_medio + " min", meta: "≤ " + META_NUM.tempo_std + " min", ok: l.tempo_medio > 0 && l.tempo_medio <= META_NUM.tempo_std, action: "Rever cadência das 7 tentativas" },
+    { kpi: "% Chamadas atendidas", val: pct(cham), meta: "≥ " + pct(META_NUM.cham_at_std), ok: cham >= META_NUM.cham_at_std, action: "Rever horários e qualidade da base" },
+    { kpi: "% Walk-in sale", val: pct(wi), meta: "≥ " + pct(META_NUM.wi_std), ok: wi >= META_NUM.wi_std, action: "Reforçar visita comercial" },
+    { kpi: "% Conversão visita", val: pct(conv), meta: "≥ " + pct(META_NUM.vc_std), ok: conv >= META_NUM.vc_std, action: "Coaching de fecho" },
+    { kpi: "Leads SLA violado", val: l.sla_bad, meta: "= 0", ok: l.sla_bad === 0, action: "Contactar imediatamente" },
+  ];
+  document.getElementById("dash-alerts").innerHTML = alerts.map(a => '<div class="alert-item"><div class="a-kpi">' + a.kpi + '</div><div class="a-val">' + a.val + ' <span style="color:#aaa">· meta ' + a.meta + '</span></div><div class="a-status ' + (a.ok ? 'ok' : 'bad') + '">' + (a.ok ? 'OK' : 'DESVIO') + '</div><div class="a-action">' + (a.ok ? '—' : a.action) + '</div></div>').join("");
+
+  const perf = performancePorComercial().filter(p => !p.comercial || !p.comercial.startsWith("["));
+  const perfFilt = filters.com ? perf.filter(p => p.comercial === filters.com) : perf;
+  document.getElementById("dash-com").innerHTML = renderPerfTable(perfFilt);
+
+  const visitas = state.visitas.filter(v => v.data && new Date(v.data) >= new Date(new Date().toDateString())).sort((a,b) => new Date(a.data) - new Date(b.data)).slice(0, 8);
+  if (!visitas.length) { document.getElementById("dash-visitas").innerHTML = '<div class="empty">Sem visitas marcadas.</div>'; }
+  else {
+    document.getElementById("dash-visitas").innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Hora</th><th>Unidade</th><th>Comercial</th><th>Cliente</th><th>Plano</th><th>Estado</th></tr></thead><tbody>' +
+      visitas.map(v => '<tr><td style="padding:6px 10px">' + fmtDate(v.data) + '</td><td style="padding:6px 10px">' + (v.hora||"") + '</td><td style="padding:6px 10px">' + escapeHtml(v.unidade||"") + '</td><td style="padding:6px 10px">' + escapeHtml(v.comercial||"") + '</td><td style="padding:6px 10px"><strong>' + escapeHtml(v.cliente||"") + '</strong></td><td style="padding:6px 10px">' + (v.plano||"") + '</td><td style="padding:6px 10px">' + (v.estado||"") + '</td></tr>').join("") + '</tbody></table></div>';
+  }
+
+  const tAtv = state.tarefas.filter(t => t.estado === "Em curso" || t.estado === "Bloqueada");
+  if (!tAtv.length) { document.getElementById("dash-tarefas").innerHTML = '<div class="empty">Sem tarefas em curso ou bloqueadas.</div>'; }
+  else {
+    document.getElementById("dash-tarefas").innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Título</th><th>Responsável</th><th>Unidade</th><th>Prioridade</th><th>Estado</th><th>Prazo</th></tr></thead><tbody>' +
+      tAtv.map(t => '<tr class="' + (t.estado === 'Bloqueada' ? 'cell-bad' : '') + '"><td style="padding:6px 10px"><strong>' + escapeHtml(t.titulo||"") + '</strong></td><td style="padding:6px 10px">' + escapeHtml(t.responsavel||"") + '</td><td style="padding:6px 10px">' + escapeHtml(t.unidade||"") + '</td><td style="padding:6px 10px">' + (t.prioridade||"") + '</td><td style="padding:6px 10px">' + (t.estado||"") + '</td><td style="padding:6px 10px">' + fmtDate(t.prazo) + '</td></tr>').join("") + '</tbody></table></div>';
+  }
+  drawCharts(a, l);
+}
+function drawCharts(a, l) {
+  const ctx1 = document.getElementById("chart-funil");
+  if (charts.funil) charts.funil.destroy();
+  charts.funil = new Chart(ctx1, { type: "bar",
+    data: { labels: ["Cham. ef.","Cham. at.","Leads rec.","Marcações","Visitas","Conversões"], datasets: [{ label:"Funil", data: [a.chamadasEf, a.chamadasAt, a.leadsRec, a.marc, a.visitas, a.conv], backgroundColor: ["#1F1F1F","#404040","#C0492B","#D4683F","#E68F66","#F4D7CC"] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: "Funil consolidado" }, legend: { display: false } } },
+  });
+  const ctx2 = document.getElementById("chart-sla");
+  if (charts.sla) charts.sla.destroy();
+  charts.sla = new Chart(ctx2, { type: "doughnut",
+    data: { labels: ["SLA OK","SLA Violado","Sem contacto"], datasets: [{ data: [l.sla_ok, l.sla_bad, l.sla_none], backgroundColor: ["#2E7D32","#C62828","#F9A825"] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: "Distribuição SLA das leads" } } },
+  });
+}
+
+function renderKPIsDetail() {
+  const perf = performancePorComercial();
+  const filt = filters.com ? perf.filter(p => p.comercial === filters.com) : perf;
+  document.getElementById("kpis-detail").innerHTML = renderPerfTable(filt);
+  const l = aggregateLeads();
+  const ctx = document.getElementById("chart-sla-detail");
+  if (charts.slaDetail) charts.slaDetail.destroy();
+  charts.slaDetail = new Chart(ctx, { type: "pie", data: { labels: ["OK","Violado","Sem contacto"], datasets: [{ data: [l.sla_ok, l.sla_bad, l.sla_none], backgroundColor: ["#2E7D32","#C62828","#F9A825"] }] }, options: { responsive: true, maintainAspectRatio: false } });
+}
+function renderComerciais() {
+  const perf = performancePorComercial();
+  const filt = filters.com ? perf.filter(p => p.comercial === filters.com) : perf;
+  document.getElementById("com-perf").innerHTML = renderPerfTable(filt);
+  const ctx = document.getElementById("chart-com");
+  if (charts.com) charts.com.destroy();
+  if (filt.length) {
+    charts.com = new Chart(ctx, { type: "bar",
+      data: { labels: filt.map(p => p.comercial), datasets: [{ label: "Visitas", data: filt.map(p => p.visitas), backgroundColor: "#1F1F1F" }, { label: "Conversões", data: filt.map(p => p.conv), backgroundColor: "#C0492B" }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: "Visitas vs Conversões por comercial" } } },
+    });
+  }
+}
+function renderLeadsPanel() {
+  renderTable("t-leads", "leads");
+  const l = aggregateLeads();
+  document.getElementById("lead-total").textContent = l.total;
+  document.getElementById("lead-ok").textContent = l.sla_ok;
+  document.getElementById("lead-bad").textContent = l.sla_bad + l.sla_none;
+}
+function renderOnboardingPanel() {
+  renderTable("t-onboarding", "onboarding");
+  let rows = state.onboarding;
+  if (filters.unit) rows = rows.filter(r => r.unidade === filters.unit);
+  if (filters.com) rows = rows.filter(r => r.comercial === filters.com);
+  document.getElementById("ob-total").textContent = rows.length;
+  document.getElementById("ob-risk").textContent = rows.filter(r => computeRisco(r) || r.estado === "Em risco").length;
+  document.getElementById("ob-cancel").textContent = rows.filter(r => r.estado === "Cancelado").length;
+}
+function renderKanban() {
+  const cont = document.getElementById("kanban"); if (!cont) return;
+  cont.innerHTML = TASK_STATUS.map(status => {
+    let tarefas = state.tarefas.filter(t => (t.estado || "A fazer") === status);
+    if (filters.com) tarefas = tarefas.filter(t => t.responsavel === filters.com);
+    if (filters.unit) tarefas = tarefas.filter(t => t.unidade === filters.unit || t.unidade === "Geral");
+    return '<div class="kanban-col" data-status="' + status + '"><h4>' + status + '<span class="n">' + tarefas.length + '</span></h4>' +
+      tarefas.map(t => {
+        const overdue = overdueCls(t.prazo) && status !== "Feita";
+        return '<div class="task-card prio-' + (t.prioridade||'Média') + ' ' + (overdue ? 'overdue' : '') + '"><div class="t-title">' + escapeHtml(t.titulo||'(sem título)') + '</div>' +
+          (t.descricao ? '<div style="font-size:11px;color:var(--grey);margin-bottom:4px">' + escapeHtml(t.descricao.slice(0,80)) + (t.descricao.length > 80 ? '...' : '') + '</div>' : '') +
+          '<div class="t-meta"><span>' + escapeHtml(t.responsavel||'') + ' · ' + escapeHtml(t.unidade||'') + '</span><span>' + (t.prazo ? fmtDate(t.prazo) : '') + '</span></div></div>';
+      }).join("") + '</div>';
+  }).join("");
+}
+
+function crescGoodCls(s) { if (!s || s === "—") return ""; const n = parseFloat(s); if (isNaN(n)) return ""; return n > 0 ? "good" : (n < 0 ? "bad" : "warn"); }
+function churnCls(s) { if (!s || s === "—") return ""; const n = parseFloat(s); if (isNaN(n)) return ""; return n <= 3 ? "good" : (n <= 6 ? "warn" : "bad"); }
+function retCls(s) { if (!s || s === "—") return ""; const n = parseFloat(s); if (isNaN(n)) return ""; return n >= 95 ? "good" : (n >= 90 ? "warn" : "bad"); }
+
+function renderSociosPanel() {
+  renderTable("t-socios", "socios");
+  const rows = [...state.socios].filter(r => r.periodo);
+  rows.sort((a,b) => String(b.periodo).localeCompare(String(a.periodo)));
+  let filtered = rows;
+  if (filters.unit) filtered = filtered.filter(r => r.unidade === filters.unit);
+  const latest = filtered[0];
+  let crescL = "—", churnL = "—", retL = "—", periodoL = "—";
+  if (latest) { crescL = computeCrescimento(latest) || "—"; churnL = computeChurn(latest) || "—"; retL = computeRetencao(latest) || "—"; periodoL = latest.periodo; }
+  const cards = [
+    { lbl: "Ativos no fim (período mais recente)", val: latest ? computeSociosFim(latest) : "—", sub: periodoL },
+    { lbl: "Crescimento", val: crescL, sub: "(Novas - Cancel) / Início", cls: crescGoodCls(crescL) },
+    { lbl: "Churn", val: churnL, sub: "Cancel / Início", cls: churnCls(churnL) },
+    { lbl: "Retenção", val: retL, sub: "1 - Churn", cls: retCls(retL) },
+  ];
+  document.getElementById("socios-cards").innerHTML = cards.map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="lbl">' + c.lbl + '</div><div class="val">' + c.val + '</div><div class="sub">' + c.sub + '</div></div>').join("");
+  drawSociosCharts(rows);
+}
+function drawSociosCharts(rows) {
+  const ctx1 = document.getElementById("chart-socios-evol");
+  if (charts.sociosEvol) charts.sociosEvol.destroy();
+  if (!ctx1 || !rows.length) return;
+  const periods = [...new Set(rows.map(r => r.periodo))].sort();
+  const units = [...new Set(rows.map(r => r.unidade).filter(Boolean))];
+  const colors = ["#C0492B","#1F1F1F","#1565C0","#2E7D32"];
+  const datasets = units.map((u, i) => ({
+    label: u,
+    data: periods.map(p => { const r = rows.find(x => x.periodo === p && x.unidade === u); return r ? computeSociosFim(r) : null; }),
+    borderColor: colors[i % colors.length],
+    backgroundColor: colors[i % colors.length] + "33",
+    tension: 0.2,
+  }));
+  charts.sociosEvol = new Chart(ctx1, { type: "line", data: { labels: periods, datasets }, options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: "Sócios ativos por unidade" } } } });
+  const ctx2 = document.getElementById("chart-socios-churn");
+  if (charts.sociosChurn) charts.sociosChurn.destroy();
+  const latestByUnit = {};
+  rows.forEach(r => { if (!latestByUnit[r.unidade] || String(r.periodo) > String(latestByUnit[r.unidade].periodo)) latestByUnit[r.unidade] = r; });
+  const labels = Object.keys(latestByUnit);
+  const churnData = labels.map(u => parseFloat(computeChurn(latestByUnit[u])) || 0);
+  charts.sociosChurn = new Chart(ctx2, { type: "bar", data: { labels, datasets: [{ label: "Churn % (último período)", data: churnData, backgroundColor: "#C62828" }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: "Churn % por unidade — último período" }, legend: { display: false } } } });
+}
+
+const SHEET_TO_KEY = {
+  "01_Inputs_Diarios": "inputs", "02_Leads_Closum": "leads", "03_Visitas_DiaSeguinte": "visitas",
+  "05_KPIs_Mensais": "kpisM", "06_Reunioes_Diarias": "reunioesD", "07_Reunioes_Semanais": "reunioesS",
+  "08_Reunioes_Mensais": "reunioesM", "09_Onboarding_30d": "onboarding",
+  "11_Cancelamentos": "cancelamentos", "12_Socios": "socios",
+  "13_Metas": "metas", "14_Equipa": "equipa",
+};
+const HEADER_TO_FIELD = {
+  "Data":"data","Unidade":"unidade","Comercial":"comercial",
+  "Chamadas efetuadas":"chamadasEf","Chamadas atendidas":"chamadasAt",
+  "Walk-in":"walkin","Walk-in sale":"walkinSale",
+  "Contactos angariados":"contAng","Leads recebidas":"leadsRec",
+  "Marcações":"marc","Visitas":"visitas","Conversões":"conv","Notas":"notas",
+  "Lead ID":"leadId","Nome":"nome","Telefone":"telefone","Origem":"origem",
+  "Entrada Closum (data/hora)":"dataEntrada","Primeiro contacto (data/hora)":"dataPrimeiroContacto",
+  "Canal":"canal","Resultado":"resultado",
+  "Data visita":"data","Hora":"hora","Cliente":"cliente",
+  "Origem lead":"origem","Plano de interesse":"plano","Estado":"estado",
+  "Data adesão":"dataAdesao","Plano":"plano",
+  "Contacto 24h":"c24h","Visita 7d":"v7d","Avaliação 30d":"av30d","Estado 30d":"estado",
+  "Período (Mês ou Semana)":"periodo","Tipo":"tipo","Nº cancelamentos":"nCancelamentos","Ficheiro (Excel/PDF)":"ficheiro",
+  "Período (AAAA-MM)":"periodo","Ativos início":"ativosInicio","Novas inscrições":"novasInsc","Cancelamentos":"cancelamentos",
+  "Performance dia anterior":"perfDiaAnt","Riscos da operação":"riscos",
+  "3 Prioridades do dia":"prioridades","Ações sobre prioridades":"acoes",
+  "Bloqueios":"bloqueios","Output definido":"output",
+  "Notas a falar (com check)":"agenda",
+  "Semana (dd/mm)":"semana","KPIs Real vs Meta":"kpisRealMeta",
+  "Tendência vs sem. ant.":"tendencia","Pipeline status":"pipeline",
+  "Desvios":"desvios","Plano de correção":"planoCorrecao",
+  "Ações atribuídas":"acoes","Responsável | Prazo":"responsavelPrazo",
+  "Mês":"mes","Performance global":"perfGlobal","Tendências":"tendencias",
+  "Avaliação equipa":"avalEquipa","Decisões registadas":"decisoes",
+  "Ajustes operacionais":"ajustes","Plano mês seguinte":"planoMesSeguinte",
+  "KPI":"kpi","Real":"real","Meta":"meta","Tendência":"tendencia","Plano de ação":"planoAcao",
+  "Email":"email","Data início":"dataInicio",
+  "Meta mínima":"min","Meta standard":"std","Meta excelência":"exc",
+};
+
+document.getElementById("file-input").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = (ev) => {
+    try { const wb = XLSX.read(new Uint8Array(ev.target.result), { type: "array", cellDates: true }); importWorkbook(wb, f.name); }
+    catch (err) { alert("Erro a ler XLSX: " + err.message); }
+  };
+  r.readAsArrayBuffer(f);
+});
+function importWorkbook(wb, filename) {
+  const summary = [], importedData = {};
+  Object.entries(SHEET_TO_KEY).forEach(([sn, key]) => {
+    if (wb.Sheets[sn]) {
+      const arr = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: "", raw: false });
+      if (arr.length < 2) return;
+      const headers = arr[1];
+      const rows = arr.slice(2).filter(r => r.some(v => v !== "" && v !== null && v !== undefined)).map(r => {
+        const o = {};
+        headers.forEach((h, i) => {
+          const fk = HEADER_TO_FIELD[h] || h;
+          if (fk.startsWith("_")) return;
+          let val = r[i];
+          if (val instanceof Date) { if (h.includes("data/hora")) val = val.toISOString().slice(0,16); else val = val.toISOString().slice(0,10); }
+          o[fk] = val;
+        });
+        return o;
+      });
+      if (rows.length) { importedData[key] = rows; summary.push(sn + " → " + rows.length + " linhas"); }
+    }
+  });
+  if (!summary.length) { alert("Nenhuma aba reconhecida em " + filename); return; }
+  showModal("Importar " + filename, "<strong>Encontrei:</strong><br><br>" + summary.join("<br>") + "<br><br>Como importar?", [
+    { label: "Substituir tudo", cls: "danger", onClick: () => { Object.entries(importedData).forEach(([k,v]) => { state[k] = v; }); afterImport(filename, summary.length); } },
+    { label: "Adicionar", cls: "primary", onClick: () => { Object.entries(importedData).forEach(([k,v]) => { state[k] = (state[k]||[]).concat(v); }); afterImport(filename, summary.length); } },
+    { label: "Cancelar", cls: "", onClick: () => closeModal() },
+  ]);
+}
+function afterImport(fn, n) { closeModal(); saveState(); populateFilters(); renderAllTables(); renderDashboard(); showBanner("✓ " + fn + " importado · " + n + " abas", "success"); }
+
+document.getElementById("btn-export-xlsx").addEventListener("click", () => {
+  const wb = XLSX.utils.book_new();
+  Object.entries(SHEET_TO_KEY).forEach(([sn, key]) => {
+    const sch = SCHEMA[key]; if (!sch) return;
+    const rows = state[key] || [];
+    const header = sch.fields.filter(f => !f.key.startsWith("_")).map(f => f.label);
+    const dataRows = rows.map(r => sch.fields.filter(f => !f.key.startsWith("_")).map(f => {
+      let v = r[f.key];
+      if (f.type === "agenda" && Array.isArray(v)) v = v.map(it => (it.discutido ? "[X] " : "[ ] ") + (it.texto||"")).join(" | ");
+      if (f.type === "file" && v && v.name) v = "📎 " + v.name;
+      return v != null ? v : "";
+    }));
+    const ws = XLSX.utils.aoa_to_sheet([[sch.label.toUpperCase()], header, ...dataRows]);
+    XLSX.utils.book_append_sheet(wb, ws, sn);
+  });
+  const tSch = SCHEMA.tarefas;
+  const tHeader = tSch.fields.map(f => f.label);
+  const tRows = state.tarefas.map(r => tSch.fields.map(f => r[f.key] != null ? r[f.key] : ""));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[tSch.label.toUpperCase()], tHeader, ...tRows]), "Tarefas");
+  const fname = "TheCode_Workflow_" + new Date().toISOString().slice(0,10) + ".xlsx";
+  XLSX.writeFile(wb, fname);
+  showBanner("✓ " + fname + " exportado", "success");
+});
+
+document.getElementById("btn-export-json").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "TheCode_backup_" + new Date().toISOString().slice(0,19).replace(/:/g, "-") + ".json";
+  a.click(); URL.revokeObjectURL(url);
+  showBanner("✓ Backup JSON descarregado", "success");
+});
+document.getElementById("btn-import-json").addEventListener("click", () => document.getElementById("json-input").click());
+document.getElementById("json-input").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = (ev) => {
+    try {
+      const p = JSON.parse(ev.target.result);
+      if (!confirm("Substituir tudo pelo conteúdo deste backup?")) return;
+      Object.keys(state).forEach(k => { if (p[k]) state[k] = p[k]; });
+      saveState(); populateFilters(); renderAllTables(); renderDashboard();
+      showBanner("✓ Backup restaurado", "success");
+    } catch (err) { alert("JSON inválido: " + err.message); }
+  };
+  r.readAsText(f);
+});
+
+document.getElementById("btn-clear").addEventListener("click", () => {
+  showModal("Limpar todos os dados", "Apaga TUDO. Faz primeiro um Backup JSON.<br><br>Tens a certeza?", [
+    { label: "Sim, limpar", cls: "danger", onClick: () => { localStorage.removeItem(STORAGE_KEY); location.reload(); } },
+    { label: "Cancelar", cls: "", onClick: () => closeModal() },
+  ]);
+});
+
+function showModal(title, body, actions) {
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-body").innerHTML = body;
+  const ac = document.getElementById("modal-actions"); ac.innerHTML = "";
+  actions.forEach(a => { const b = document.createElement("button"); b.textContent = a.label; if (a.cls) b.className = a.cls; b.onclick = a.onClick; ac.appendChild(b); });
+  document.getElementById("modal-bg").classList.add("show");
+}
+function closeModal() { document.getElementById("modal-bg").classList.remove("show"); }
+document.getElementById("modal-bg").addEventListener("click", (e) => { if (e.target.id === "modal-bg") closeModal(); });
+function showBanner(text, type) {
+  const main = document.querySelector("main");
+  const b = document.createElement("div"); b.className = "banner " + (type||""); b.textContent = text;
+  main.insertBefore(b, main.firstChild);
+  setTimeout(() => b.remove(), 4000);
+}
+
+function populateFilters() {
+  const units = [...new Set(state.equipa.map(e => e.unidade).filter(Boolean))];
+  const coms = [...new Set(state.equipa.map(e => e.comercial).filter(c => c && !c.startsWith("[")))];
+  const fU = document.getElementById("filter-unit");
+  const fC = document.getElementById("filter-com");
+  fU.innerHTML = '<option value="">Todas</option>' + units.map(u => '<option ' + (filters.unit === u ? "selected" : "") + '>' + escapeHtml(u) + '</option>').join("");
+  fC.innerHTML = '<option value="">Todos</option>' + coms.map(c => '<option ' + (filters.com === c ? "selected" : "") + '>' + escapeHtml(c) + '</option>').join("");
+}
+document.getElementById("filter-unit").addEventListener("change", e => { filters.unit = e.target.value; renderActivePanel(); });
+document.getElementById("filter-com").addEventListener("change", e => { filters.com = e.target.value; renderActivePanel(); });
+document.getElementById("filter-period").addEventListener("change", e => { filters.period = e.target.value; renderActivePanel(); });
+
+document.querySelectorAll("#tabs button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+    renderActivePanel();
+  });
+});
+function renderActivePanel() {
+  const tab = document.querySelector("#tabs button.active").dataset.tab;
+  if (tab === "dashboard") renderDashboard();
+  if (tab === "kpis") renderKPIsDetail();
+  if (tab === "comerciais") renderComerciais();
+  if (tab === "leads") renderLeadsPanel();
+  if (tab === "onboarding") renderOnboardingPanel();
+  if (tab === "inputs") renderTable("t-inputs", "inputs");
+  if (tab === "visitas") renderTable("t-visitas", "visitas");
+  if (tab === "tarefas") { renderKanban(); renderTable("t-tarefas", "tarefas"); }
+  if (tab === "reunioes-d") renderTable("t-reunioesD", "reunioesD");
+  if (tab === "reunioes-s") renderTable("t-reunioesS", "reunioesS");
+  if (tab === "reunioes-m") renderTable("t-reunioesM", "reunioesM");
+  if (tab === "kpisM") renderTable("t-kpisM", "kpisM");
+  if (tab === "socios") renderSociosPanel();
+  if (tab === "cancelamentos") renderTable("t-cancelamentos", "cancelamentos");
+  if (tab === "config") { renderTable("t-equipa", "equipa"); renderTable("t-metas", "metas"); }
+  updateTabCounts();
+}
+function updateTabCounts() {
+  document.querySelectorAll("#tabs button").forEach(btn => {
+    const tab = btn.dataset.tab; let n = null;
+    const map = { leads:"leads", visitas:"visitas", tarefas:"tarefas", onboarding:"onboarding", inputs:"inputs", socios:"socios" };
+    if (map[tab]) n = state[map[tab]].length;
+    const ex = btn.querySelector(".count");
+    if (n !== null && n > 0) {
+      if (ex) ex.textContent = n;
+      else { const s = document.createElement("span"); s.className = "count"; s.textContent = n; btn.appendChild(s); }
+    } else if (ex) ex.remove();
+  });
+}
+function renderAllTables() {
+  ["inputs","leads","visitas","onboarding","cancelamentos","socios","reunioesD","reunioesS","reunioesM","kpisM","tarefas","equipa","metas"].forEach(k => {
+    const el = document.getElementById("t-" + k); if (el) renderTable("t-" + k, k);
+  });
+  renderKanban();
+}
+
+loadState();
+populateFilters();
+renderActivePanel();
+renderAllTables();
+updateTabCounts();
+document.getElementById("save-status").textContent = "Pronto";
+</script>
+</body>
+</html>
