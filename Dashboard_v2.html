@@ -822,7 +822,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 </section>
 
 <!-- ══════════════════════════════════════════
-     SÓCIOS  (inclui Cancelamentos)
+     SÓCIOS
 ══════════════════════════════════════════ -->
 <section class="panel" id="panel-socios">
   <div id="socios-stats"></div>
@@ -837,17 +837,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="chart-wrap"><canvas id="chart-socios-churn"></canvas></div>
   </div>
 
-  <hr class="section-divider">
-
-  <h2 class="section" style="margin-top:28px">Cancelamentos
-    <span class="actions">
-      <button onclick="addRow('cancelamentos')" class="primary">+ Adicionar registo</button>
-    </span>
-  </h2>
-  <div class="info-box">
-    Regista aqui os cancelamentos mensais ou semanais por unidade. Para análise de crescimento e retenção agregada usa a secção <strong>Sócios</strong> acima.
-  </div>
-  <div id="t-cancelamentos"></div>
 </section>
 
 
@@ -1476,15 +1465,55 @@ const CLOSUM_PROXY = (window.location.hostname === 'localhost' || window.locatio
 // ── Server state sync (só activo no Railway, não em ficheiro local) ─────────
 const SERVER_SYNC = window.location.protocol === 'https:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
 let _syncPushTimer = null;
+let _lastServerUpdatedAt = null; // updated_at da última vez que falámos com o servidor
+
+// Arrays que devem ser fundidos por união (nunca substituídos cegamente)
+const _MERGE_ARRAY_KEYS = [
+  'leads','socios','cancelamentos','equipa','inputs','metas',
+  'objetivos','tarefas','reunioes','vendasExtras','kpisM','ficheiros'
+];
+
+// Funde dados do servidor no estado local: preserva alterações locais e
+// acrescenta itens que o servidor tem mas o local não tem.
+function _mergeServerData(serverData) {
+  if (!serverData || typeof serverData !== 'object') return false;
+  let changed = false;
+  Object.keys(serverData).forEach(k => {
+    if (serverData[k] === undefined) return;
+    const local  = state[k];
+    const server = serverData[k];
+    if (_MERGE_ARRAY_KEYS.includes(k) && Array.isArray(local) && Array.isArray(server)) {
+      // União: adicionar ao local os itens que só existem no servidor
+      const localSet   = new Set(local.map(r => JSON.stringify(r)));
+      const serverOnly = server.filter(r => !localSet.has(JSON.stringify(r)));
+      if (serverOnly.length > 0) {
+        state[k] = [...local, ...serverOnly];
+        changed = true;
+      }
+    } else if (!_MERGE_ARRAY_KEYS.includes(k)) {
+      // Escalares e config: o servidor ganha no pull (dados autoritativos)
+      if (JSON.stringify(state[k]) !== JSON.stringify(server)) {
+        state[k] = server;
+        changed = true;
+      }
+    }
+  });
+  return changed;
+}
 
 async function pushStateToServer() {
   if (!SERVER_SYNC) return;
   try {
-    await fetch('/api/state', {
+    const res = await fetch('/api/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: state })
     });
+    if (res.ok) {
+      const json = await res.json();
+      // Guardar o timestamp do servidor para o próximo pull não sobrescrever o que acabámos de guardar
+      if (json.updated_at) _lastServerUpdatedAt = json.updated_at;
+    }
   } catch(e) { console.warn('[sync] push failed:', e.message); }
 }
 
@@ -1495,9 +1524,21 @@ async function pullStateFromServer() {
     if (!res.ok) return false;
     const json = await res.json();
     if (!json.data) return false;
-    Object.keys(state).forEach(k => { if (json.data[k] !== undefined) state[k] = json.data[k]; });
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
-    return true;
+
+    // Se o servidor não tem dados mais recentes do que o que já temos, não fazer nada
+    if (_lastServerUpdatedAt && json.updated_at) {
+      const serverMs = new Date(json.updated_at).getTime();
+      const knownMs  = new Date(_lastServerUpdatedAt).getTime();
+      if (serverMs <= knownMs) return false;
+    }
+
+    // Fundir em vez de substituir — preserva alterações locais não guardadas
+    const changed = _mergeServerData(json.data);
+    _lastServerUpdatedAt = json.updated_at || null;
+    if (changed) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
+    }
+    return changed;
   } catch(e) { console.warn('[sync] pull failed:', e.message); return false; }
 }
 

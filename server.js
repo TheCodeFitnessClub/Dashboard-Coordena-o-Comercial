@@ -47,16 +47,58 @@ app.get('/api/state', async (req, res) => {
   }
 });
 
-// ── API: guardar estado ───────────────────────────────────────────────────────
+// ── Fusão de arrays: union por conteúdo (client + itens únicos do server) ─────
+// Preserva todos os registos de ambos os lados — nenhum dado é perdido.
+function mergeStates(server, client) {
+  if (!server || typeof server !== 'object') return client;
+  if (!client || typeof client !== 'object') return server;
+
+  const merged = { ...server };
+
+  // Arrays que devem ser fundidos por união de conteúdo
+  const ARRAY_KEYS = [
+    'leads','socios','cancelamentos','equipa','inputs','metas',
+    'objetivos','tarefas','reunioes','vendasExtras','kpisM','ficheiros'
+  ];
+
+  Object.keys(client).forEach(k => {
+    const c = client[k];
+    const s = server[k];
+
+    if (ARRAY_KEYS.includes(k) && Array.isArray(c) && Array.isArray(s)) {
+      // União: todos os itens do cliente + itens do servidor que não existem no cliente
+      const clientSet = new Set(c.map(r => JSON.stringify(r)));
+      const serverOnly = s.filter(r => !clientSet.has(JSON.stringify(r)));
+      merged[k] = [...c, ...serverOnly];
+    } else {
+      // Escalares, objectos de config, customCols: o cliente ganha
+      merged[k] = c;
+    }
+  });
+
+  return merged;
+}
+
+// ── API: guardar estado (com fusão) ───────────────────────────────────────────
 app.post('/api/state', async (req, res) => {
   try {
     const { data } = req.body;
     if (!data) return res.status(400).json({ error: 'data required' });
-    await pool.query(`
+
+    // Ler estado actual do servidor para fundir
+    const current = await pool.query('SELECT data FROM app_state WHERE id = 1');
+    const serverData = current.rows.length > 0 ? current.rows[0].data : null;
+
+    // Fundir: preserva dados do servidor que o cliente não tem
+    const merged = serverData ? mergeStates(serverData, data) : data;
+
+    const result = await pool.query(`
       INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, NOW())
       ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = NOW()
-    `, [data]);
-    res.json({ ok: true });
+      RETURNING updated_at
+    `, [merged]);
+
+    res.json({ ok: true, updated_at: result.rows[0].updated_at });
   } catch (e) {
     console.error('POST /api/state:', e.message);
     res.status(500).json({ error: e.message });
