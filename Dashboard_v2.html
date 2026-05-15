@@ -1458,12 +1458,10 @@ function fmtVal(v, suffix) {
 const SLA_CUTOFF = "2026-05-02"; // leads com dataEntrada ≤ esta data não contam
 
 // ── Proxy URL: localhost em dev, mesmo servidor em produção (Railway) ──────
-const CLOSUM_PROXY = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:3001/'
-  : window.location.origin + '/proxy';
+const CLOSUM_PROXY = window.location.origin + '/proxy';
 
-// ── Server state sync (só activo no Railway, não em ficheiro local) ─────────
-const SERVER_SYNC = window.location.protocol === 'https:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1');
+// ── Server state sync (só activo no Railway) ──────────────────────────────────
+const SERVER_SYNC = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 let _syncPushTimer = null;
 let _lastServerUpdatedAt = null; // updated_at da última vez que falámos com o servidor
 
@@ -4775,7 +4773,6 @@ async function doSyncClosum(silent = false) {
     let page = 1, allApiLeads = [], hasMore = true;
     while (hasMore) {
       const closumUrl = `https://api.closum.com/v2/lead/?api-key=${encodeURIComponent(s.closumKey)}&limit=100&page=${page}`;
-      // Proxy: localhost:3001 em dev, /proxy no servidor Railway em produção
       const url = `${CLOSUM_PROXY}?url=${encodeURIComponent(closumUrl)}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
