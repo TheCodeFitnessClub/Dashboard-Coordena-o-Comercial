@@ -1463,20 +1463,23 @@ const CLOSUM_PROXY = window.location.origin + '/proxy';
 // ── Server state sync (só activo no Railway) ──────────────────────────────────
 const SERVER_SYNC = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 let _syncPushTimer = null;
+let _isDirty = false; // true enquanto houver alterações locais ainda não guardadas no servidor
 
 async function pushStateToServer() {
   if (!SERVER_SYNC) return;
   try {
-    await fetch('/api/state', {
+    const res = await fetch('/api/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: state })
     });
+    if (res.ok) _isDirty = false; // guardado com sucesso
   } catch(e) { console.warn('[sync] push failed:', e.message); }
 }
 
 async function pullStateFromServer() {
   if (!SERVER_SYNC) return false;
+  if (_isDirty) return false; // não sobrescrever alterações locais por guardar
   try {
     const res = await fetch('/api/state');
     if (!res.ok) return false;
@@ -1524,6 +1527,7 @@ function saveState() {
     } catch(e) { el.textContent = "⚠ Erro (localStorage cheio?)"; }
   }, 250);
   // Push para o servidor (debounced 1s — só no Railway)
+  _isDirty = true;
   clearTimeout(_syncPushTimer);
   _syncPushTimer = setTimeout(pushStateToServer, 1000);
 }
