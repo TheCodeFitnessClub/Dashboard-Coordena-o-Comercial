@@ -666,6 +666,19 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 
   <!-- Inputs Diários -->
   <div class="sub-panel active" data-subpanel="inputs">
+    <h2 class="section">Resumo do período</h2>
+    <div class="grid c4" style="margin-bottom:12px">
+      <div class="kpi"><div class="lbl">Leads</div><div class="val" id="inp-kpi-leads"></div><div class="sub">Leads recebidas</div></div>
+      <div class="kpi"><div class="lbl">REFS</div><div class="val" id="inp-kpi-refs"></div><div class="sub">Contactos angariados</div></div>
+      <div class="kpi"><div class="lbl">POS</div><div class="val" id="inp-kpi-pos"></div><div class="sub">Pontos de contacto</div></div>
+      <div class="kpi"><div class="lbl">Chamadas Efetuadas</div><div class="val" id="inp-kpi-chamEf"></div><div class="sub">Total no período</div></div>
+    </div>
+    <div class="grid c4" style="margin-bottom:18px">
+      <div class="kpi"><div class="lbl">Marcações</div><div class="val" id="inp-kpi-marc"></div><div class="sub">Reuniões marcadas</div></div>
+      <div class="kpi"><div class="lbl">Conversões</div><div class="val" id="inp-kpi-conv"></div><div class="sub">Vendas confirmadas</div></div>
+      <div class="kpi"><div class="lbl">Walk-in</div><div class="val" id="inp-kpi-walkin"></div><div class="sub">Visitas espontâneas</div></div>
+      <div class="kpi"><div class="lbl">Walk-in Sale</div><div class="val" id="inp-kpi-walkinSale"></div><div class="sub">Walk-ins convertidas</div></div>
+    </div>
     <h2 class="section">Inputs Diários
       <span class="actions">
         <button onclick="addRow('inputs')" class="primary">+ Adicionar linha</button>
@@ -2470,6 +2483,21 @@ function toggleInputsGroup(dateKey) {
   renderInputsGrouped("t-inputs");
 }
 
+// ── KPIs do topo da aba Inputs Diários (respeita período/clube/comercial) ─────
+function renderInputsKpis() {
+  if (!document.getElementById("inp-kpi-leads")) return; // painel não montado
+  const a = aggregateInputs(false);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val||0); };
+  set("inp-kpi-leads",      a.leadsRec);
+  set("inp-kpi-refs",       a.contAng);
+  set("inp-kpi-pos",        a.pos);
+  set("inp-kpi-chamEf",     a.chamadasEf);
+  set("inp-kpi-marc",       a.marc);
+  set("inp-kpi-conv",       a.conv);
+  set("inp-kpi-walkin",     a.walkin);
+  set("inp-kpi-walkinSale", a.walkinSale);
+}
+
 function renderInputsGrouped(containerId) {
   const c = document.getElementById(containerId); if (!c) return;
   const sch = SCHEMA["inputs"];
@@ -3910,7 +3938,7 @@ function initSubTabs() {
 }
 function renderSubPanel(group, subtab) {
   if (group==="kpis") {
-    if (subtab==="inputs")     renderInputsGrouped("t-inputs");
+    if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
     if (subtab==="leads")      renderLeadsPanel();
     if (subtab==="comerciais") renderComerciais();
     if (subtab==="kpisM")      renderKpisMensais();
@@ -3947,7 +3975,7 @@ function renderAllForKey(schemaKey) {
     tarefas:"t-tarefas", rotina:"t-rotina", equipa:"t-equipa", metas:"t-metas",
     objetivos:"t-objetivos", vendasExtras:"t-vendas-extras",
   };
-  if (schemaKey==="inputs") renderInputsGrouped("t-inputs");
+  if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
   else if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
   if (schemaKey==="tarefas") {
     renderKanban();
