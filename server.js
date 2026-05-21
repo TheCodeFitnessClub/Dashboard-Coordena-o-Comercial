@@ -53,12 +53,13 @@ app.post('/api/state', async (req, res) => {
     const { data } = req.body;
     if (!data) return res.status(400).json({ error: 'data required' });
 
-    await pool.query(`
+    const result = await pool.query(`
       INSERT INTO app_state (id, data, updated_at) VALUES (1, $1, NOW())
       ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = NOW()
+      RETURNING updated_at
     `, [data]);
 
-    res.json({ ok: true });
+    res.json({ ok: true, updated_at: result.rows[0].updated_at });
   } catch (e) {
     console.error('POST /api/state:', e.message);
     res.status(500).json({ error: e.message });

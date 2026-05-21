@@ -362,6 +362,11 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .task-card .t-meta{display:flex;justify-content:space-between;color:var(--grey);font-size:10px;margin-top:6px;font-weight:500}
 .task-card.overdue{background:var(--red-l);border-left-color:var(--red)}
 .task-card.overdue .t-meta{color:var(--red);font-weight:600}
+.kanban-pagination{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.kanban-pagination button{background:var(--card-bg);border:1px solid var(--line);color:var(--grey);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer}
+.kanban-pagination button:hover:not(:disabled){background:var(--orange);border-color:var(--orange);color:#fff}
+.kanban-pagination button:disabled{opacity:.35;cursor:default}
+.kanban-pagination span{font-size:11px;color:var(--grey);min-width:40px;text-align:center}
 
 /* ── Meeting templates ── */
 .meet-tpl{background:var(--card-bg);border:none;border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:var(--card-shadow)}
@@ -1189,11 +1194,18 @@ const SCHEMA = {
     { key:"notas",      label:"Notas",       type:"textarea", w:220 },
   ]},
   tarefas: { label:"Tarefas", pageSize:10, sortFn:(a,b)=>{
-    const ORD={"A fazer":0,"Em curso":1,"Feita":2};
-    const oa=ORD[a.estado]!==undefined?ORD[a.estado]:0, ob=ORD[b.estado]!==undefined?ORD[b.estado]:0;
-    if (oa!==ob) return oa-ob;
-    const pa=a.prazo||"9999", pb=b.prazo||"9999";
-    return pa<pb?-1:pa>pb?1:0;
+    const aFeita = (a.estado||"A fazer")==="Feita", bFeita = (b.estado||"A fazer")==="Feita";
+    // Não-feitas primeiro, feitas no fim
+    if (aFeita !== bFeita) return aFeita ? 1 : -1;
+    if (!aFeita) {
+      // Por fazer / Em curso: prazo mais próximo primeiro (sem prazo vai para o fim)
+      const pa = a.prazo||"9999", pb = b.prazo||"9999";
+      return pa < pb ? -1 : pa > pb ? 1 : 0;
+    } else {
+      // Feitas: mais recentemente criada primeiro
+      const ca = a.criadoEm||"0000", cb = b.criadoEm||"0000";
+      return ca < cb ? 1 : ca > cb ? -1 : 0;
+    }
   }, fields:[
     { key:"titulo",      label:"Título",       type:"text",     w:220 },
     { key:"descricao",   label:"Descrição",    type:"textarea", w:280 },
@@ -1464,6 +1476,20 @@ const CLOSUM_PROXY = window.location.origin + '/proxy';
 const SERVER_SYNC = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 let _syncPushTimer = null;
 let _isDirty = false; // true enquanto houver alterações locais ainda não guardadas no servidor
+let _lastServerUpdatedAt = null; // timestamp do último estado conhecido do servidor
+
+// Detecta se o utilizador está activamente a interagir com a UI (a digitar num campo,
+// com um modal aberto, etc.) — nesse caso não fazemos pull para não interromper.
+function _userIsInteracting() {
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
+    return true;
+  }
+  // Se houver algum modal/dialog visível, também não interromper
+  const modal = document.querySelector('.modal-overlay:not([hidden]), .meeting-log-modal, [role="dialog"]:not([hidden])');
+  if (modal && modal.offsetParent !== null) return true;
+  return false;
+}
 
 async function pushStateToServer() {
   if (!SERVER_SYNC) return;
@@ -1473,18 +1499,28 @@ async function pushStateToServer() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: state })
     });
-    if (res.ok) _isDirty = false; // guardado com sucesso
+    if (res.ok) {
+      _isDirty = false;
+      try {
+        const json = await res.json();
+        if (json.updated_at) _lastServerUpdatedAt = json.updated_at;
+      } catch(_) {}
+    }
   } catch(e) { console.warn('[sync] push failed:', e.message); }
 }
 
 async function pullStateFromServer() {
   if (!SERVER_SYNC) return false;
-  if (_isDirty) return false; // não sobrescrever alterações locais por guardar
+  if (_isDirty) return false;            // alterações locais por guardar
+  if (_userIsInteracting()) return false; // utilizador a editar / modal aberto
   try {
     const res = await fetch('/api/state');
     if (!res.ok) return false;
     const json = await res.json();
     if (!json.data) return false;
+    // Se o timestamp do servidor não mudou desde o último sync, NADA mudou — não re-renderizar
+    if (_lastServerUpdatedAt && json.updated_at === _lastServerUpdatedAt) return false;
+    _lastServerUpdatedAt = json.updated_at || _lastServerUpdatedAt;
     Object.assign(state, json.data);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
     return true;
@@ -2461,9 +2497,9 @@ function renderInputsGrouped(containerId) {
   };
   groupOrder.sort((a, b) => parseInputDate(b) - parseInputDate(a));
 
-  // Key summary fields to show in compact row
-  const sumKeys = ["leadsRec","marc","visitas","conv","walkin","walkinSale"];
-  const sumLabels = { leadsRec:"Leads", marc:"Marc.", visitas:"Visitas", conv:"Conv.", walkin:"Walk-in", walkinSale:"WI sale" };
+  // Key summary fields to show in compact row (all numeric fields)
+  const sumKeys = ["leadsRec","contAng","pos","chamadasEf","chamadasAt","marc","marcDia","visitas","conv","walkin","walkinSale"];
+  const sumLabels = { leadsRec:"Leads", contAng:"REF", pos:"POS", chamadasEf:"Cham. ef.", chamadasAt:"Cham. at.", marc:"Marc.", marcDia:"Marc. dia", visitas:"Visitas", conv:"Conv.", walkin:"Walk-in", walkinSale:"WI sale" };
 
   let html = '<div class="tbl-wrap"><div class="tbl-search">';
   html += '<input placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="_tblSearch[\''+containerId+'\']=this.value;renderInputsGrouped(\''+containerId+'\')">';
@@ -3806,6 +3842,14 @@ function renderTarefasAlert() {
 }
 
 // ── Tarefas / Kanban ───────────────────────────────────────
+const KANBAN_PAGE_SIZE = 10;
+let _kanbanPage = {}; // { "A fazer": 1, "Em curso": 1, "Feita": 1 }
+
+function setKanbanPage(status, page) {
+  _kanbanPage[status] = page;
+  renderKanban();
+}
+
 function renderKanban() {
   renderTarefasAlert();
   const cont=document.getElementById("kanban"); if(!cont) return;
@@ -3813,13 +3857,38 @@ function renderKanban() {
     let tarefas=state.tarefas.filter(t=>(t.estado||"A fazer")===status);
     if (filters.com)  tarefas=tarefas.filter(t=>t.responsavel===filters.com);
     if (filters.unit) tarefas=tarefas.filter(t=>t.unidade===status||t.unidade==="Geral"||!t.unidade||t.unidade===filters.unit);
-    return '<div class="kanban-col" data-status="'+status+'"><h4>'+status+'<span class="n">'+tarefas.length+'</span></h4>'+
-      tarefas.map(t=>{
-        const overdue=overdueCls(t.prazo)&&status!=="Feita";
-        return '<div class="task-card prio-'+(t.prioridade||"Média")+' '+(overdue?"overdue":"")+'">'+
-          '<div class="t-title">'+escapeHtml(t.titulo||"(sem título)")+'</div>'+
-          (t.descricao?'<div style="font-size:11px;color:var(--grey);margin-bottom:4px">'+escapeHtml(t.descricao.slice(0,80))+(t.descricao.length>80?"...":"")+'</div>':"")+'<div class="t-meta"><span>'+escapeHtml(t.responsavel||"")+" · "+escapeHtml(t.unidade||"")+"</span><span>"+(t.prazo?fmtDate(t.prazo):"")+"</span></div></div>";
-      }).join("")+"</div>";
+
+    // Ordenar da mais recente para a mais antiga
+    tarefas = tarefas.slice().sort((a,b)=>{
+      const ca=a.criadoEm||"0000", cb=b.criadoEm||"0000";
+      return ca<cb?1:ca>cb?-1:0;
+    });
+
+    const total = tarefas.length;
+    const totalPages = Math.max(1, Math.ceil(total / KANBAN_PAGE_SIZE));
+    const page = Math.min(Math.max(1, _kanbanPage[status]||1), totalPages);
+    _kanbanPage[status] = page;
+    const pageSlice = tarefas.slice((page-1)*KANBAN_PAGE_SIZE, page*KANBAN_PAGE_SIZE);
+
+    const cards = pageSlice.map(t=>{
+      const overdue=overdueCls(t.prazo)&&status!=="Feita";
+      return '<div class="task-card prio-'+(t.prioridade||"Média")+' '+(overdue?"overdue":"")+'">'+
+        '<div class="t-title">'+escapeHtml(t.titulo||"(sem título)")+'</div>'+
+        (t.descricao?'<div style="font-size:11px;color:var(--grey);margin-bottom:4px">'+escapeHtml(t.descricao.slice(0,80))+(t.descricao.length>80?"...":"")+'</div>':"")+'<div class="t-meta"><span>'+escapeHtml(t.responsavel||"")+" · "+escapeHtml(t.unidade||"")+"</span><span>"+(t.prazo?fmtDate(t.prazo):"")+"</span></div></div>";
+    }).join("");
+
+    const statusEsc = escapeHtml(status).replace(/'/g,"\\'");
+    const pagination = totalPages > 1
+      ? '<div class="kanban-pagination">'+
+          '<button '+(page<=1?'disabled':'')+' onclick="setKanbanPage(\''+statusEsc+'\','+(page-1)+')">←</button>'+
+          '<span>'+page+' / '+totalPages+'</span>'+
+          '<button '+(page>=totalPages?'disabled':'')+' onclick="setKanbanPage(\''+statusEsc+'\','+(page+1)+')">→</button>'+
+        '</div>'
+      : '';
+
+    return '<div class="kanban-col" data-status="'+status+'">'+
+      '<h4>'+status+'<span class="n">'+total+'</span></h4>'+
+      cards + pagination + '</div>';
   }).join("");
 }
 
@@ -5141,6 +5210,10 @@ function toggleRlogBody(id) {
   body.style.display = open ? 'none' : 'block';
   btn.textContent = open ? '▾ Ver log' : '▴ Esconder';
 }
+let _meetingLogPage = 1;
+const MEETING_LOG_PAGE_SIZE = 10;
+function setMeetingLogPage(p) { _meetingLogPage = p; renderMeetingLogsPanel(); }
+
 function renderMeetingLogsPanel() {
   const el = document.getElementById('reunioes-log-panel');
   if (!el) return;
@@ -5160,7 +5233,20 @@ function renderMeetingLogsPanel() {
     el.innerHTML = '<div style="color:var(--grey);padding:40px 0;text-align:center;font-size:14px">Nenhum log registado ainda.<br>Clica em 📋 numa reunião para abrir o log.</div>';
     return;
   }
-  el.innerHTML = entries.map(({sk,idx,row,log}) => {
+  const totalPages = Math.max(1, Math.ceil(entries.length / MEETING_LOG_PAGE_SIZE));
+  _meetingLogPage = Math.min(Math.max(1, _meetingLogPage), totalPages);
+  const pageEntries = entries.slice((_meetingLogPage-1)*MEETING_LOG_PAGE_SIZE, _meetingLogPage*MEETING_LOG_PAGE_SIZE);
+
+  const paginationHtml = totalPages > 1
+    ? '<div class="tbl-pagination" style="margin:16px 0 8px">'
+      + '<button '+(_meetingLogPage<=1?'disabled':'')+' onclick="setMeetingLogPage('+(_meetingLogPage-1)+')">← Anterior</button>'
+      + (() => { let s=''; const delta=2; for(let p=1;p<=totalPages;p++){if(p===1||p===totalPages||(p>=_meetingLogPage-delta&&p<=_meetingLogPage+delta)){s+='<button class="'+(p===_meetingLogPage?'active':'')+'" onclick="setMeetingLogPage('+p+')">'+p+'</button>';}else if(p===_meetingLogPage-delta-1||p===_meetingLogPage+delta+1){s+='<span class="pg-info">…</span>';}} return s; })()
+      + '<button '+(_meetingLogPage>=totalPages?'disabled':'')+' onclick="setMeetingLogPage('+(_meetingLogPage+1)+')">Próxima →</button>'
+      + '<span class="count" style="margin-left:8px">'+entries.length+' logs</span>'
+      + '</div>'
+    : '';
+
+  el.innerHTML = paginationHtml + pageEntries.map(({sk,idx,row,log}) => {
     const tipo  = TIPO_LABEL[sk] || sk;
     const color = TIPO_COLOR[sk] || '#888';
     const meta  = [row.data ? fmtDate(row.data) : '', row.hora || '', row.unidade || ''].filter(Boolean).join(' · ');
@@ -5185,7 +5271,7 @@ function renderMeetingLogsPanel() {
         ${section('➕','Outros pontos', log.outros)}
       </div>
     </div>`;
-  }).join('');
+  }).join('') + paginationHtml;
 }
 
 // ── Google Calendar — reuniões ───────────────────────────────────
