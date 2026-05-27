@@ -4880,10 +4880,10 @@ async function doSyncClosum(silent = false) {
           console.log('[Closum sync] Estrutura do detalhe (1º lead):', dData);
           firstDetailLogged = true;
         }
-        // Tentar várias estruturas possíveis da resposta
-        const cd = dData.responseData?.custom_data
-                || dData.responseData?.lead?.custom_data
-                || dData.custom_data
+        // Estrutura real do Closum: responseData.lead_data.custom_fields
+        const cd = dData.responseData?.lead_data?.custom_fields
+                || dData.responseData?.custom_fields
+                || dData.responseData?.lead_data?.custom_data
                 || null;
         if (Array.isArray(cd)) {
           const mot = cd.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '';
