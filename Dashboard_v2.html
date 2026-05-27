@@ -4849,35 +4849,54 @@ async function doSyncClosum(silent = false) {
     const savedDPC = {};
     state.leads.forEach(l => { if (l.nome && l.dataPrimeiroContacto) savedDPC[l.nome.trim().toLowerCase()] = l.dataPrimeiroContacto; });
 
-    // Identificar leads perdidas cujo detalhe precisamos de buscar individualmente
-    // (o endpoint de listagem não devolve custom_data — só o endpoint de detalhe o inclui)
+    // O endpoint de listagem /v2/lead/ devolve custom_data:null — só o endpoint
+    // de detalhe /v2/lead/{id}/ inclui os custom_data preenchidos.
+    // Por isso, para cada lead que ainda não tem motivoPerdido guardado, vamos
+    // buscar o detalhe individual.
     const needsDetail = [];
     for (const al of allApiLeads) {
-      const seq = mapSeqToResultado(al.lead_sales_sequence) || '';
-      const seqLow = seq.toLowerCase();
-      const isPerdido = seqLow.includes('perdido') || seqLow.includes('lost') || seqLow.includes('não interessado');
       const alreadyHas = byId['CLO-'+al.id]?.motivoPerdido;
-      if (isPerdido && !alreadyHas && al.custom_data === null) {
+      // Se o listing já trouxe custom_data preenchido, não precisa de detalhe
+      const listingHas = Array.isArray(al.custom_data) &&
+        al.custom_data.some(f => f.var === 'motivo-de-negocio-perdido' && f.value);
+      if (!alreadyHas && !listingHas) {
         needsDetail.push(al.id);
       }
     }
-    // Buscar detalhe individual (máx 80 para não sobrecarregar a API)
+    console.log('[Closum sync] Leads a buscar detalhe:', needsDetail.length, 'de', allApiLeads.length);
+
+    // Buscar detalhe individual (máx 150 por sync para não sobrecarregar a API)
     const detailMap = {};
-    for (const id of needsDetail.slice(0, 80)) {
+    let firstDetailLogged = false;
+    for (const id of needsDetail.slice(0, 150)) {
       try {
-        const detailUrl = `https://api.closum.com/v2/lead/${id}/?api-key=${encodeURIComponent(s.closumKey)}`;
+        const detailUrl = `https://api.closum.com/v2/lead/view/${id}?api-key=${encodeURIComponent(s.closumKey)}`;
         const dUrl = `${CLOSUM_PROXY}?url=${encodeURIComponent(detailUrl)}`;
         const dResp = await fetch(dUrl);
-        if (dResp.ok) {
-          const dData = await dResp.json();
-          const cd = dData.responseData?.custom_data || dData.custom_data || null;
-          if (Array.isArray(cd)) {
-            const mot = cd.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '';
-            if (mot) detailMap[id] = mot;
+        if (!dResp.ok) continue;
+        const dData = await dResp.json();
+        // Log da estrutura do primeiro detalhe para debug
+        if (!firstDetailLogged) {
+          console.log('[Closum sync] Estrutura do detalhe (1º lead):', dData);
+          firstDetailLogged = true;
+        }
+        // Tentar várias estruturas possíveis da resposta
+        const cd = dData.responseData?.custom_data
+                || dData.responseData?.lead?.custom_data
+                || dData.custom_data
+                || null;
+        if (Array.isArray(cd)) {
+          const mot = cd.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '';
+          if (mot) {
+            detailMap[id] = mot;
+            console.log('[Closum sync] Motivo encontrado para lead', id, ':', mot);
           }
         }
-      } catch(_) {}
+      } catch(e) {
+        console.warn('[Closum sync] Erro a buscar detalhe da lead', id, e.message);
+      }
     }
+    console.log('[Closum sync] Total de motivos encontrados:', Object.keys(detailMap).length);
 
     let novos = 0, atualizadas = 0;
     for (const al of allApiLeads) {
