@@ -4954,16 +4954,16 @@ async function doSyncClosum(silent = false) {
     state.leads.forEach(l => { if (l.nome && l.dataPrimeiroContacto) savedDPC[l.nome.trim().toLowerCase()] = l.dataPrimeiroContacto; });
 
     // O endpoint de listagem /v2/lead/ devolve custom_data:null — só o endpoint
-    // de detalhe /v2/lead/{id}/ inclui os custom_data preenchidos.
-    // Por isso, para cada lead que ainda não tem motivoPerdido guardado, vamos
-    // buscar o detalhe individual.
+    // de detalhe /v2/lead/{id}/ inclui os custom_fields preenchidos.
+    // Buscamos sempre o detalhe (excepto se o próprio listing já o trouxer)
+    // para detectar alterações no motivo de negócio perdido.
     const needsDetail = [];
     for (const al of allApiLeads) {
-      const alreadyHas = byId['CLO-'+al.id]?.motivoPerdido;
-      // Se o listing já trouxe custom_data preenchido, não precisa de detalhe
-      const listingHas = Array.isArray(al.custom_data) &&
-        al.custom_data.some(f => f.var === 'motivo-de-negocio-perdido' && f.value);
-      if (!alreadyHas && !listingHas) {
+      const cfList = Array.isArray(al.custom_fields) ? al.custom_fields
+                   : Array.isArray(al.custom_data)   ? al.custom_data
+                   : null;
+      const listingHas = cfList && cfList.some(f => f.var === 'motivo-de-negocio-perdido' && f.value);
+      if (!listingHas) {
         needsDetail.push(al.id);
       }
     }
@@ -5009,8 +5009,11 @@ async function doSyncClosum(silent = false) {
       const dataEntrada = adjustEntradaHorario(String(al.creation_date).slice(0,16));
       const seqResultado = mapSeqToResultado(al.lead_sales_sequence);
       const seqTs        = getSeqTimestamp(al.lead_sales_sequence);
-      const motivoPerdido = Array.isArray(al.custom_data)
-        ? (al.custom_data.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '')
+      const cfListMain = Array.isArray(al.custom_fields) ? al.custom_fields
+                       : Array.isArray(al.custom_data)   ? al.custom_data
+                       : null;
+      const motivoPerdido = cfListMain
+        ? (cfListMain.find(f => f.var === 'motivo-de-negocio-perdido')?.value || (detailMap[al.id] || ''))
         : (detailMap[al.id] || '');
 
       const nomeKey = (al.name||'').trim().toLowerCase();
