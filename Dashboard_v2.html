@@ -4849,6 +4849,36 @@ async function doSyncClosum(silent = false) {
     const savedDPC = {};
     state.leads.forEach(l => { if (l.nome && l.dataPrimeiroContacto) savedDPC[l.nome.trim().toLowerCase()] = l.dataPrimeiroContacto; });
 
+    // Identificar leads perdidas cujo detalhe precisamos de buscar individualmente
+    // (o endpoint de listagem não devolve custom_data — só o endpoint de detalhe o inclui)
+    const needsDetail = [];
+    for (const al of allApiLeads) {
+      const seq = mapSeqToResultado(al.lead_sales_sequence) || '';
+      const seqLow = seq.toLowerCase();
+      const isPerdido = seqLow.includes('perdido') || seqLow.includes('lost') || seqLow.includes('não interessado');
+      const alreadyHas = byId['CLO-'+al.id]?.motivoPerdido;
+      if (isPerdido && !alreadyHas && al.custom_data === null) {
+        needsDetail.push(al.id);
+      }
+    }
+    // Buscar detalhe individual (máx 80 para não sobrecarregar a API)
+    const detailMap = {};
+    for (const id of needsDetail.slice(0, 80)) {
+      try {
+        const detailUrl = `https://api.closum.com/v2/lead/${id}/?api-key=${encodeURIComponent(s.closumKey)}`;
+        const dUrl = `${CLOSUM_PROXY}?url=${encodeURIComponent(detailUrl)}`;
+        const dResp = await fetch(dUrl);
+        if (dResp.ok) {
+          const dData = await dResp.json();
+          const cd = dData.responseData?.custom_data || dData.custom_data || null;
+          if (Array.isArray(cd)) {
+            const mot = cd.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '';
+            if (mot) detailMap[id] = mot;
+          }
+        }
+      } catch(_) {}
+    }
+
     let novos = 0, atualizadas = 0;
     for (const al of allApiLeads) {
       const lid = 'CLO-' + al.id;
@@ -4858,7 +4888,7 @@ async function doSyncClosum(silent = false) {
       const seqTs        = getSeqTimestamp(al.lead_sales_sequence);
       const motivoPerdido = Array.isArray(al.custom_data)
         ? (al.custom_data.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '')
-        : '';
+        : (detailMap[al.id] || '');
 
       const nomeKey = (al.name||'').trim().toLowerCase();
       if (byId[lid]) {
