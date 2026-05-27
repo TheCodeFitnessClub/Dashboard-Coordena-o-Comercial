@@ -1114,6 +1114,7 @@ const SCHEMA = {
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
+    { key:"motivoPerdido",        label:"Motivo perdido",       type:"text",          w:160 },
     { key:"notas",                label:"Notas",                type:"textarea",      w:200 },
   ]},
   cancelamentos: { label:"Cancelamentos", pageSize:10, sortBy:"periodo", sortDir:"asc", fields:[
@@ -4855,6 +4856,9 @@ async function doSyncClosum(silent = false) {
       const dataEntrada = adjustEntradaHorario(String(al.creation_date).slice(0,16));
       const seqResultado = mapSeqToResultado(al.lead_sales_sequence);
       const seqTs        = getSeqTimestamp(al.lead_sales_sequence);
+      const motivoPerdido = Array.isArray(al.custom_data)
+        ? (al.custom_data.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '')
+        : '';
 
       const nomeKey = (al.name||'').trim().toLowerCase();
       if (byId[lid]) {
@@ -4872,6 +4876,7 @@ async function doSyncClosum(silent = false) {
         if (ex.sequencia !== seqResultado) { ex.sequencia = seqResultado; changed = true; }
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
         if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
+        if (motivoPerdido && ex.motivoPerdido !== motivoPerdido) { ex.motivoPerdido = motivoPerdido; changed = true; }
         if (changed) atualizadas++;
       } else {
         // Lead nova — recuperar dataPrimeiroContacto manual se existia antes (ex: após "apagar todas")
@@ -4887,6 +4892,7 @@ async function doSyncClosum(silent = false) {
           comercial:            closumUserToComercial(userMap[al.user_id]),
           dataPrimeiroContacto: dpcGuardado || dpcFromSeq,
           sequencia:            seqResultado,
+          motivoPerdido,
           notas:                '',
         });
         novos++;
