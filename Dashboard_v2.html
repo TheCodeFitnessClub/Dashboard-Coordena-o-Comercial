@@ -643,7 +643,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
      DASHBOARD
 ══════════════════════════════════════════ -->
 <section class="panel active" id="panel-dashboard">
-  <!-- KPI numbers -->
+  <!-- KPI numbers (inclui Planos, Motivos de Negócio Perdido e Objetivo de Vendas) -->
   <div id="dash-kpis"></div>
   <!-- Charts 2×2 -->
   <div class="grid c2" style="gap:18px" id="dash-charts">
@@ -651,6 +651,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="chart-wrap" style="height:300px"><canvas id="chart-socios-dash"></canvas></div>
     <div class="chart-wrap" style="height:300px"><canvas id="chart-vendas-dash"></canvas></div>
     <div class="chart-wrap" style="height:300px"><canvas id="chart-obj-dash"></canvas></div>
+    <div class="chart-wrap" style="height:300px"><canvas id="chart-motivos-perdido"></canvas></div>
   </div>
 </section>
 
@@ -1114,8 +1115,6 @@ const SCHEMA = {
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
-    { key:"motivoPerdido",        label:"Motivo perdido",       type:"text",          w:160 },
-    { key:"notas",                label:"Notas",                type:"textarea",      w:200 },
   ]},
   cancelamentos: { label:"Cancelamentos", pageSize:10, sortBy:"periodo", sortDir:"asc", fields:[
     { key:"periodo",        label:"Período (Mês ou Semana)", type:"text",     w:160 },
@@ -3254,6 +3253,10 @@ function renderDashboard() {
     h += _kpiCard('Plus',    totPlanos>0 ? pctPLUS+'%' : '', totPLUS+' planos', '', 'border-left:3px solid #F97316');
     h += '</div>';
 
+    // Row 3c: Motivos de Negócio Perdido
+    h += '<div class="dash-section-label">Motivos de Negócio Perdido</div>';
+    h += '<div id="motivos-perdido-display" class="grid c4" style="margin-bottom:4px"></div>';
+
     // Row 4: Objetivos por clube (anchor month) com barra de progresso
     h += '<div class="dash-section-label">Objetivo de vendas — '+escapeHtml(mesLbl)+'</div>';
     h += '<div class="grid" style="grid-template-columns:repeat('+cols+',1fr);gap:14px;margin-bottom:24px">';
@@ -3282,11 +3285,15 @@ function renderDashboard() {
     el.innerHTML = h;
   }
 
+  // ── Motivos de Negócio Perdido (cards) ─────────────────
+  renderMotivosPerdidoDisplay();
+
   // ── Charts ──────────────────────────────────────────────
   renderTempoRespChart();
   renderSociosDashChart();
   renderVendasDashChart();
   renderObjDashChart();
+  renderMotivosPerdidoChart();
 }
 
 function renderSociosDashChart() {
@@ -3329,6 +3336,103 @@ function renderVendasDashChart() {
     options:{responsive:true, maintainAspectRatio:false,
       plugins:{title:{display:true,text:'Vendas mensais por clube'},legend:{display:true}},
       scales:{x:{grid:{display:false}, stacked:false}, y:{beginAtZero:true}}},
+  });
+}
+
+// ── Motivos de Negócio Perdido ─────────────────────────────
+const MOTIVO_OPTIONS = [
+  'Preço',
+  'Concorrência',
+  'Localização',
+  'Não respondeu / Incontactável',
+  'Perdeu interesse',
+  'Timing - voltará mais tarde',
+  'Já é sócio noutra unidade TheCode',
+  'Outro',
+];
+const MOTIVO_CUTOFF = '2026-06-01';
+const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8'];
+
+function aggregateMotivosPerdidos(previous) {
+  // Reutiliza aggregateLeads para aplicar filtros (unidade/comercial/período)
+  const l = aggregateLeads(previous);
+  const counts = {};
+  MOTIVO_OPTIONS.forEach(m => counts[m] = 0);
+  let total = 0;
+  l.rows.forEach(r => {
+    const mot = (r.motivoPerdido || '').trim();
+    if (!mot) return;
+    if (counts.hasOwnProperty(mot)) {
+      counts[mot]++;
+    } else {
+      counts['Outro']++;
+    }
+    total++;
+  });
+  return { counts, total };
+}
+
+function renderMotivosPerdidoDisplay() {
+  const el = document.getElementById('motivos-perdido-display');
+  if (!el) return;
+  const { counts, total } = aggregateMotivosPerdidos(false);
+  el.innerHTML = MOTIVO_OPTIONS.map((m, i) => {
+    const c = counts[m] || 0;
+    const pct = total > 0 ? Math.round((c/total)*100) : 0;
+    return `<div class="kpi" style="border-left:3px solid ${MOTIVO_COLORS[i]}">
+      <div class="lbl" style="font-size:10.5px">${m}</div>
+      <div class="val">${pct}%</div>
+      <div class="sub">${c} de ${total}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderMotivosPerdidoChart() {
+  const ctx = document.getElementById('chart-motivos-perdido');
+  if (!ctx) return;
+  const { counts, total } = aggregateMotivosPerdidos(false);
+  const labels = [], data = [], colors = [];
+  MOTIVO_OPTIONS.forEach((m, i) => {
+    if ((counts[m] || 0) > 0) {
+      labels.push(m);
+      data.push(counts[m]);
+      colors.push(MOTIVO_COLORS[i]);
+    }
+  });
+  if (charts.motivosPerdido) charts.motivosPerdido.destroy();
+  if (total === 0) {
+    // Render placeholder
+    charts.motivosPerdido = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: ['Sem dados'], datasets: [{ data: [1], backgroundColor: ['rgba(255,255,255,.08)'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: {
+          title: { display: true, text: 'Motivos de Negócio Perdido' },
+          legend: { display: false },
+          tooltip: { enabled: false },
+        },
+      },
+    });
+    return;
+  }
+  charts.motivosPerdido = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 1, borderColor: 'rgba(0,0,0,.2)' }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: 'Motivos de Negócio Perdido' },
+        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.raw || 0;
+              const pct = total ? Math.round((v/total)*100) : 0;
+              return ` ${ctx.label}: ${v} (${pct}%)`;
+            },
+          },
+        },
+      },
+    },
   });
 }
 
