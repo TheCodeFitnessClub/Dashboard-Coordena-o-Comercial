@@ -990,6 +990,23 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 ══════════════════════════════════════════ -->
 <section class="panel" id="panel-objetivos">
 
+  <!-- Objetivos Coordenação (no topo) -->
+  <h2 class="section">Objetivos Coordenação
+    <span class="actions">
+      <button id="btn-objCoord-toggle" onclick="toggleObjCoordVisibility()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">👁 Ocultar</button>
+      <button onclick="addObjCoordMonth()" class="primary">+ Novo mês</button>
+    </span>
+  </h2>
+  <div id="objCoord-wrapper">
+    <div class="info-box" style="margin-bottom:14px">
+      Define os 3 objetivos da coordenação para cada mês. O <strong>Valor</strong> é o prémio em € e a <strong>Meta</strong> é o limite a atingir (ex: <em>≥ 25%</em>, <em>≤ 25 min</em>, <em>≤ 5%</em>).
+    </div>
+    <div id="objCoord-blocks" style="margin-bottom:28px"></div>
+  </div>
+  <div id="objCoord-hidden-placeholder" style="display:none;margin-bottom:28px;padding:30px;text-align:center;background:var(--card-bg);border:1px dashed var(--line);border-radius:var(--radius-sm);color:var(--grey);font-size:13px">
+    🔒 Objetivos ocultos — clica em "Mostrar" para ver
+  </div>
+
   <!-- Period info banner (auto-injected) -->
   <div id="obj-period-banner"></div>
 
@@ -1188,6 +1205,13 @@ const SCHEMA = {
     { key:"qtd",       label:"Vendas",    type:"number",   w:80 },
     { key:"notas",     label:"Notas",     type:"textarea", w:280 },
   ]},
+  objetivosCoord: { label:"Objetivos Coordenação", pageSize:99, sortBy:"mes", sortDir:"desc", fields:[
+    { key:"mes",      label:"Mês (AAAA-MM)",   type:"text",     w:130 },
+    { key:"objetivo", label:"Objetivo",         type:"text",     w:260 },
+    { key:"valor",    label:"Valor (€)",        type:"number",   w:110 },
+    { key:"meta",     label:"Meta",             type:"text",     w:160 },
+    { key:"notas",    label:"Notas",            type:"textarea", w:280 },
+  ]},
   objetivos: { label:"Objetivos Mensais", pageSize:10, sortBy:"mes", sortDir:"desc", fields:[
     { key:"mes",       label:"Mês (AAAA-MM)",    type:"text",     w:130 },
     { key:"unidade",   label:"Unidade",           type:"select",   options:UNIDADES, w:180 },
@@ -1284,7 +1308,7 @@ let state = {
   inputs:[], leads:[],
   cancelamentos:[], socios:[],
   reunioesD:[], reunioesS:[], reunioesM:[], reunioesC:[], reunioesDir:[],
-  kpisM:[], tarefas:[], rotina:[], objetivos:[], vendasExtras:[],
+  kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   ficheiros:[],
 };
@@ -4760,6 +4784,139 @@ function renderObjetivos() {
 
   // ── Objectives table ──
   renderTable("t-objetivos","objetivos");
+
+  // ── Objetivos Coordenação (agrupado por mês) ──
+  renderObjetivosCoord();
+  applyObjCoordVisibility();
+}
+
+// ── Objetivos Coordenação: render agrupado por mês ─────────────
+function renderObjetivosCoord() {
+  const cont = document.getElementById('objCoord-blocks');
+  if (!cont) return;
+
+  // Agrupar por mês mantendo índice global
+  const byMonth = {};
+  (state.objetivosCoord || []).forEach((r, idx) => {
+    const m = r.mes || '(sem mês)';
+    if (!byMonth[m]) byMonth[m] = [];
+    byMonth[m].push({ row: r, idx });
+  });
+
+  const allMonths = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
+
+  // Aplicar filtro de período da aba horizontal (ignora "(sem mês)" para o filtro)
+  const monthsValidos = allMonths.filter(m => /^\d{4}-\d{2}$/.test(m));
+  const monthsSemDate = allMonths.filter(m => !/^\d{4}-\d{2}$/.test(m));
+  const selectedMonths = new Set(getSelectedPeriods(monthsValidos, false));
+  const months = [
+    ...allMonths.filter(m => selectedMonths.has(m)),
+    ...monthsSemDate, // manter sempre os "(sem mês)" visíveis para o utilizador corrigir
+  ];
+
+  if (allMonths.length === 0) {
+    cont.innerHTML = '<div class="empty" style="padding:18px;text-align:center;color:var(--grey)">Sem objetivos definidos. Clica em "+ Novo mês" para começar.</div>';
+    return;
+  }
+  if (months.length === 0) {
+    cont.innerHTML = '<div class="empty" style="padding:18px;text-align:center;color:var(--grey)">Nenhum mês corresponde ao período seleccionado na barra de filtros.</div>';
+    return;
+  }
+
+  const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const fmtMes = (m) => {
+    const p = String(m).split('-');
+    if (p.length === 2 && p[0].length === 4) {
+      const mi = Number(p[1]) - 1;
+      if (mi >= 0 && mi < 12) return MONTHS_PT[mi] + ' ' + p[0];
+    }
+    return m;
+  };
+
+  let html = '';
+  months.forEach((m, blockIdx) => {
+    const rows = byMonth[m];
+    html += '<div style="margin-bottom:20px;background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line)">';
+    html += `<h3 style="margin:0;font-size:13px;color:var(--dark);font-weight:700;letter-spacing:.3px">${escapeHtml(fmtMes(m))} <span style="color:var(--grey);font-weight:400;font-size:11px">· ${escapeHtml(m)}</span></h3>`;
+    html += `<button onclick="deleteObjCoordMonth('${escapeHtml(m)}')" style="background:none;border:1px solid var(--line);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer">Apagar mês</button>`;
+    html += '</div>';
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += '<thead><tr style="background:rgba(255,255,255,.02)">'
+         + '<th style="text-align:left;padding:8px 14px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Objetivo</th>'
+         + '<th style="text-align:right;padding:8px 14px;width:120px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Valor (€)</th>'
+         + '<th style="text-align:left;padding:8px 14px;width:160px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Meta</th>'
+         + '</tr></thead>';
+    html += '<tbody>';
+    rows.forEach(({ row, idx }) => {
+      const inpStyle = 'width:100%;background:transparent;border:none;color:var(--dark);outline:none;font-family:inherit;font-size:13px;padding:2px 4px;border-bottom:1px solid transparent;transition:border-color .15s';
+      html += '<tr style="border-top:1px solid var(--line)">'
+           + `<td style="padding:8px 12px"><input type="text" value="${escapeHtml(row.objetivo||'')}" placeholder="Nome do objetivo" oninput="updateObjCoord(${idx},'objetivo',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle}"></td>`
+           + `<td style="padding:8px 12px"><input type="number" value="${escapeHtml(String(row.valor??''))}" placeholder="0" oninput="updateObjCoord(${idx},'valor',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle};text-align:right"></td>`
+           + `<td style="padding:8px 12px"><input type="text" value="${escapeHtml(row.meta||'')}" placeholder="≥ 25%" oninput="updateObjCoord(${idx},'meta',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle}"></td>`
+           + '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '</div>';
+  });
+
+  cont.innerHTML = html;
+}
+
+function addObjCoordMonth() {
+  const m = prompt('Mês para os 3 objetivos (formato AAAA-MM, ex: 2026-06):');
+  if (!m) return;
+  if (!/^\d{4}-\d{2}$/.test(m.trim())) {
+    alert('Formato inválido. Usa AAAA-MM (ex: 2026-06).');
+    return;
+  }
+  const mes = m.trim();
+  if (!state.objetivosCoord) state.objetivosCoord = [];
+  // Verificar se já existe — não duplicar
+  const jaExiste = state.objetivosCoord.some(r => r.mes === mes);
+  if (jaExiste) {
+    alert('Já existem objetivos para esse mês.');
+    return;
+  }
+  for (let i = 0; i < 3; i++) {
+    state.objetivosCoord.push({ mes, objetivo:'', valor:'', meta:'', notas:'' });
+  }
+  saveState();
+  renderObjetivosCoord();
+}
+
+function updateObjCoord(idx, key, val) {
+  if (!state.objetivosCoord || !state.objetivosCoord[idx]) return;
+  state.objetivosCoord[idx][key] = (key === 'valor')
+    ? (val === '' ? '' : Number(val))
+    : val;
+  saveState();
+}
+
+function deleteObjCoordMonth(mes) {
+  if (!confirm('Apagar todos os objetivos de ' + mes + '?')) return;
+  state.objetivosCoord = (state.objetivosCoord || []).filter(r => r.mes !== mes);
+  saveState();
+  renderObjetivosCoord();
+}
+
+// Visibilidade dos Objetivos Coordenação (per-dispositivo, não sincroniza com servidor)
+function _isObjCoordHidden() {
+  try { return localStorage.getItem('thecode_objCoord_hidden') === '1'; } catch(_) { return false; }
+}
+function applyObjCoordVisibility() {
+  const hidden = _isObjCoordHidden();
+  const wrap = document.getElementById('objCoord-wrapper');
+  const ph   = document.getElementById('objCoord-hidden-placeholder');
+  const btn  = document.getElementById('btn-objCoord-toggle');
+  if (wrap) wrap.style.display = hidden ? 'none' : '';
+  if (ph)   ph.style.display   = hidden ? '' : 'none';
+  if (btn)  btn.textContent    = hidden ? '👁 Mostrar' : '🙈 Ocultar';
+}
+function toggleObjCoordVisibility() {
+  const hidden = _isObjCoordHidden();
+  try { localStorage.setItem('thecode_objCoord_hidden', hidden ? '0' : '1'); } catch(_) {}
+  applyObjCoordVisibility();
 }
 
 // ── API Settings (armazenadas separadamente do estado) ─────────────
