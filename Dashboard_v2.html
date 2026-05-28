@@ -4969,9 +4969,16 @@ async function doSyncClosum(silent = false) {
     // Índice de leads existentes por CLO-{id}
     const byId = {};
     state.leads.forEach(l => { if (l.leadId) byId[l.leadId] = l; });
-    // Preservar dataPrimeiroContacto manual: guardar mapa nome→data antes de qualquer alteração
+    // Preservar dataPrimeiroContacto: rastrear por leadId E por nome
+    // (qualquer data já preenchida — manual ou auto — NUNCA é sobrescrita por sync)
     const savedDPC = {};
-    state.leads.forEach(l => { if (l.nome && l.dataPrimeiroContacto) savedDPC[l.nome.trim().toLowerCase()] = l.dataPrimeiroContacto; });
+    const savedDPCById = {};
+    state.leads.forEach(l => {
+      const dpc = l.dataPrimeiroContacto && String(l.dataPrimeiroContacto).trim();
+      if (!dpc) return;
+      if (l.nome) savedDPC[l.nome.trim().toLowerCase()] = dpc;
+      if (l.leadId) savedDPCById[l.leadId] = dpc;
+    });
 
     // Só buscamos detalhe individual para leads com sequência "perdido/lost/não interessado",
     // que são as únicas que podem ter motivoPerdido. Reduz drasticamente o nº de chamadas.
@@ -5041,8 +5048,14 @@ async function doSyncClosum(silent = false) {
       if (byId[lid]) {
         const ex = byId[lid];
         let changed = false;
-        // dataPrimeiroContacto: só preenche se ainda estiver vazio — NUNCA sobrescreve
-        if (!ex.dataPrimeiroContacto) {
+        // ════════════════════════════════════════════════════════════════════
+        // dataPrimeiroContacto: NUNCA sobrescrever se já está preenchido.
+        // Só preenchemos automaticamente se a data está VAZIA (string vazia,
+        // null, undefined ou apenas whitespace). Qualquer valor existente
+        // — manual ou de sync anterior — é IMUTÁVEL pelo sync automático.
+        // ════════════════════════════════════════════════════════════════════
+        const dpcExistente = ex.dataPrimeiroContacto && String(ex.dataPrimeiroContacto).trim();
+        if (!dpcExistente) {
           const wasNovo     = !ex.sequencia || ex.sequencia === 'Novo';
           const isContacted = seqResultado && seqResultado !== 'Novo';
           if (wasNovo && isContacted) {
@@ -5056,9 +5069,10 @@ async function doSyncClosum(silent = false) {
         if (motivoPerdido && ex.motivoPerdido !== motivoPerdido) { ex.motivoPerdido = motivoPerdido; changed = true; }
         if (changed) atualizadas++;
       } else {
-        // Lead nova — recuperar dataPrimeiroContacto manual se existia antes (ex: após "apagar todas")
-        const dpcGuardado = savedDPC[nomeKey] || '';
-        // Se já tem sequência contactada no Closum, usar o timestamp da sequência como 1º contacto
+        // Lead nova — primeiro tentar recuperar dataPrimeiroContacto por leadId,
+        // depois por nome (compatibilidade após "apagar todas"). Se nada existe,
+        // só então usamos o timestamp da sequência do Closum.
+        const dpcGuardado = savedDPCById[lid] || savedDPC[nomeKey] || '';
         const dpcFromSeq = (!dpcGuardado && seqResultado && seqResultado !== 'Novo' && seqTs) ? seqTs : '';
         state.leads.push({
           leadId:               lid,
