@@ -1133,6 +1133,7 @@ const SCHEMA = {
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
+    { key:"dataFecho",            label:"Data Fecho",           type:"datetime",      w:170 },
   ]},
   cancelamentos: { label:"Cancelamentos", pageSize:10, sortBy:"periodo", sortDir:"asc", fields:[
     { key:"periodo",        label:"Período (Mês ou Semana)", type:"text",     w:160 },
