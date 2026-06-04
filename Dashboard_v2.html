@@ -5418,17 +5418,28 @@ async function doSyncClosum(silent = false) {
       if (page > 200) break; // safety cap
     }
 
-    // Deduplicar state.leads por leadId (limpa duplicados criados por syncs concorrentes antigos)
+    // Deduplicar state.leads por leadId — PRIORIZA leads com dataFechoManual=true
+    // (para nunca perder edições manuais por duplicação)
     {
-      const seenIds = new Set();
-      let removedDupes = 0;
-      state.leads = state.leads.filter(l => {
-        if (!l.leadId) return true; // manter leads criadas manualmente
-        if (seenIds.has(l.leadId)) { removedDupes++; return false; }
-        seenIds.add(l.leadId);
-        return true;
+      const byIdAll = {};
+      state.leads.forEach(l => {
+        if (!l.leadId) return;
+        if (!byIdAll[l.leadId]) { byIdAll[l.leadId] = l; return; }
+        const winner = byIdAll[l.leadId];
+        // Se algum dos duplicados tem flag manual, esse ganha
+        if (l.dataFechoManual && !winner.dataFechoManual) { byIdAll[l.leadId] = l; return; }
+        // Se ambos têm ou nenhum tem, manter a com mais dados (heurística simples)
+        if (!winner.dataFechoManual && !l.dataFechoManual) {
+          const wScore = (winner.dataFecho?1:0) + (winner.motivoPerdido?1:0);
+          const lScore = (l.dataFecho?1:0) + (l.motivoPerdido?1:0);
+          if (lScore > wScore) byIdAll[l.leadId] = l;
+        }
       });
-      if (removedDupes > 0) console.log('[Closum sync] Removidas', removedDupes, 'leads duplicadas');
+      const originalCount = state.leads.length;
+      const manuals = state.leads.filter(l => !l.leadId); // criadas manualmente sem leadId
+      state.leads = [...Object.values(byIdAll), ...manuals];
+      const removed = originalCount - state.leads.length;
+      if (removed > 0) console.log('[Closum sync] Removidas', removed, 'leads duplicadas (preservadas as com dataFechoManual)');
     }
 
     // Índice de leads existentes por CLO-{id}
@@ -5491,25 +5502,46 @@ async function doSyncClosum(silent = false) {
     console.log('[Closum sync] Leads a buscar detalhe:', needsDetail.length,
                 '(motivos:', needsMotivo.size, ', sources:', needsSource.size, ') de', allApiLeads.length);
 
-    // Buscar detalhe em paralelo, em batches de 10
-    //  - Em modo backfill (1º sync após esta versão): sem limite, para apanhar todas as leads
-    //  - Em modo normal: máx 300 por sync (suficiente para perdidos novos)
+    // Buscar detalhe em paralelo, em batches PEQUENOS para evitar 502 do proxy/Railway
+    //  - Em modo backfill (1º sync): limitado a 200 (chunked em múltiplos syncs se preciso)
+    //  - Em modo normal: máx 80 por sync
     const detailMap   = {}; // id → motivoPerdido
     const sourceMap   = {}; // id → source
     let firstDetailLogged = false;
-    const maxFetch = sourceBackfillDone ? 300 : needsDetail.length;
+    const maxFetch = sourceBackfillDone ? 80 : Math.min(needsDetail.length, 200);
     const idsToFetch = needsDetail.slice(0, maxFetch);
-    const BATCH_SIZE = 10;
-    console.log('[Closum sync] Backfill source:', sourceBackfillDone ? 'JÁ FEITO' : 'EM CURSO — vai buscar detalhe para', idsToFetch.length, 'leads');
+    const BATCH_SIZE = 4;     // reduzido de 10 → 4 para evitar 502
+    const BATCH_DELAY = 150;  // 150ms entre batches (gentil com o proxy)
+
+    // Fetch com 1 retry em caso de erro de rede ou 502/503
+    async function fetchDetailWithRetry(id) {
+      const detailUrl = `https://api.closum.com/v2/lead/view/${id}?api-key=${encodeURIComponent(s.closumKey)}`;
+      const dUrl = `${CLOSUM_PROXY}?url=${encodeURIComponent(detailUrl)}`;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const dResp = await fetch(dUrl);
+          if (dResp.ok) return await dResp.json();
+          if (dResp.status >= 500 && attempt === 0) {
+            await new Promise(r => setTimeout(r, 400));
+            continue;
+          }
+          return null;
+        } catch(e) {
+          if (attempt === 0) { await new Promise(r => setTimeout(r, 400)); continue; }
+          return null;
+        }
+      }
+      return null;
+    }
+
+    console.log('[Closum sync] Backfill source:', sourceBackfillDone ? 'JÁ FEITO' : 'EM CURSO — vai buscar detalhe para', idsToFetch.length, 'leads (batches de '+BATCH_SIZE+')');
+    let errors502 = 0;
     for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
       const batch = idsToFetch.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (id) => {
         try {
-          const detailUrl = `https://api.closum.com/v2/lead/view/${id}?api-key=${encodeURIComponent(s.closumKey)}`;
-          const dUrl = `${CLOSUM_PROXY}?url=${encodeURIComponent(detailUrl)}`;
-          const dResp = await fetch(dUrl);
-          if (!dResp.ok) return;
-          const dData = await dResp.json();
+          const dData = await fetchDetailWithRetry(id);
+          if (!dData) { errors502++; return; }
           if (!firstDetailLogged) {
             console.log('[Closum sync] Estrutura do detalhe (1º lead):', dData);
             const ldDbg = dData.responseData?.lead_data || dData.responseData || {};
@@ -5532,10 +5564,16 @@ async function doSyncClosum(silent = false) {
             if (src) sourceMap[id] = src;
           }
         } catch(e) {
+          errors502++;
           console.warn('[Closum sync] Erro a buscar detalhe da lead', id, e.message);
         }
       }));
+      // Delay entre batches para não saturar o proxy
+      if (i + BATCH_SIZE < idsToFetch.length) {
+        await new Promise(r => setTimeout(r, BATCH_DELAY));
+      }
     }
+    if (errors502 > 0) console.warn('[Closum sync] Erros de detalhe:', errors502, '/', idsToFetch.length);
     console.log('[Closum sync] Total motivos encontrados:', Object.keys(detailMap).length,
                 '· sources encontradas:', Object.keys(sourceMap).length);
 
@@ -5586,13 +5624,19 @@ async function doSyncClosum(silent = false) {
           changed = true;
           // Quando passa para uma sequência fechada (ganho/perdido), guardar data de fecho
           // — excepto se a lead tem dataFechoManual (foi editada manualmente)
-          if (isClosedSeq(seqResultado) && !ex.dataFechoManual) {
-            ex.dataFecho = seqTs || getCurrentLocalDatetime();
+          if (isClosedSeq(seqResultado)) {
+            if (!ex.dataFechoManual) {
+              ex.dataFecho = seqTs || getCurrentLocalDatetime();
+            } else {
+              console.log('[Closum sync] dataFecho protegida (manual):', ex.leadId, ex.nome);
+            }
           }
-        } else if (isClosedSeq(seqResultado) && !ex.dataFecho && !ex.dataFechoManual) {
-          // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
-          ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
-          if (ex.dataFecho) changed = true;
+        } else if (isClosedSeq(seqResultado) && !ex.dataFecho) {
+          if (!ex.dataFechoManual) {
+            // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
+            ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
+            if (ex.dataFecho) changed = true;
+          }
         }
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
         if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
