@@ -2836,33 +2836,39 @@ function aggregateInputs(previous) {
     conv:sum("conv"),             n:rows.length,
   };
 }
-// Conversão Closum (Lead Digital): ganhos Lead Digital / total Lead Digital FECHADAS no período
-// Numerador: leads source=Lead Digital + ganhas + dataFecho no período
-// Denominador: leads source=Lead Digital + fechadas (ganho ou perdido) + dataFecho no período
-// Aplica também filtros de unidade/comercial.
+// Conversão Closum (Lead Digital):
+//   Numerador  = Lead Digital + ganhas + dataFecho no período
+//   Denominador = Lead Digital "no período" (cada lead conta uma vez):
+//                   • se fechada (ganho/perdido) → dataFecho no período
+//                   • se aberta (em curso)       → dataEntrada no período
+//   Aplica filtros de unidade/comercial.
 function aggregateLeadDigitalConv(previous) {
-  let rows = state.leads || [];
+  let baseRows = state.leads || [];
   const cmp   = previous && filters.compare && filters.compareParams ? filters.compareParams : null;
   const unitF = cmp ? (cmp.unitB || "") : filters.unit;
   const comF  = cmp ? (cmp.comB  || "") : filters.com;
   if (unitF) {
     const membros = (state.equipa||[]).filter(e=>e.unidade===unitF&&e.estado!=="Inativo").map(e=>e.comercial).filter(Boolean);
-    rows = rows.filter(r => membros.includes(r.comercial));
+    baseRows = baseRows.filter(r => membros.includes(r.comercial));
   }
-  if (comF) rows = rows.filter(r => r.comercial === comF);
-  // Filtrar source = Lead Digital e estar fechada com dataFecho
-  rows = rows.filter(r =>
-    normalizeSource(r.source) === 'Lead Digital'
-    && isClosedSeq(r.sequencia)
-    && r.dataFecho
-  );
-  // Filtrar período por dataFecho
+  if (comF) baseRows = baseRows.filter(r => r.comercial === comF);
+  baseRows = baseRows.filter(r => normalizeSource(r.source) === 'Lead Digital');
+
   const p = filters.period;
-  if (p && p !== 'comparar') {
-    rows = rows.filter(r => matchPeriod(String(r.dataFecho).slice(0,10), p, !!previous));
-  }
-  const ganhos = rows.filter(r => isWonSeq(r.sequencia)).length;
-  const total  = rows.length;
+  const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
+
+  // Denominador: regra unificada (fechadas por dataFecho + abertas por dataEntrada)
+  const totalRows = baseRows.filter(r => {
+    if (isClosedSeq(r.sequencia)) return r.dataFecho && inPeriod(r.dataFecho);
+    return r.dataEntrada && inPeriod(r.dataEntrada);
+  });
+  const total = totalRows.length;
+
+  // Numerador: ganhas com dataFecho no período
+  const ganhos = baseRows.filter(r =>
+    isWonSeq(r.sequencia) && r.dataFecho && inPeriod(r.dataFecho)
+  ).length;
+
   return { total, ganhos };
 }
 
@@ -3214,7 +3220,7 @@ function renderDashboard() {
   const el = document.getElementById('dash-kpis');
   if (el) {
     const l  = aggregateLeads();
-    // Conversão Closum = Lead Digital ganhos / Lead Digital total no período (por dataEntrada)
+    // Conversão Closum = Lead Digital ganhos (dataFecho no período) / Lead Digital total (dataEntrada no período)
     const ldConv = aggregateLeadDigitalConv(false);
     const ganhos = ldConv.ganhos;
     const convPct = ldConv.total ? Math.round(ganhos/ldConv.total*100) : 0;
@@ -3298,7 +3304,7 @@ function renderDashboard() {
     h += '<div class="grid c4" style="margin-bottom:4px">';
     h += _kpiCard('Leads totais', l.total, 'no período filtrado', '', null,
       lP ? compareKpi(l.total, lP.total) : '');
-    h += _kpiCard('Conversão Closum', convPct+'%', ganhos+' ganhos de '+l.total, convCls, null,
+    h += _kpiCard('Conversão Closum', convPct+'%', ganhos+' ganhos de '+ldConv.total+' Lead Digital', convCls, null,
       lP ? compareKpi(convPct, convPctP, {unit:'%'}) : '');
     h += _kpiCard('Tempo médio de resposta', tempo ? tempo+' min' : '', 'Closum → 1.º contacto', tempoCls, null,
       lP ? compareKpi(tempo, tempoP, {format:n=>(n>0?n+' min':'')}) : '');
@@ -3451,7 +3457,7 @@ const SOURCE_COLORS = ['#F97316','#A855F7','#22C55E','#60A5FA','#FBBF24','#F8717
 const SOURCE_BASELINE = [
   'Lead Digital',
   'Contacto Direto Clube',
-  'WI',
+  'Walk-in não convertido',
   'REFS',
   'OUT',
 ];
@@ -3472,19 +3478,25 @@ function _leadsRespeitamFiltrosUnitCom(previous) {
 function aggregateSources(previous) {
   const baseRows = _leadsRespeitamFiltrosUnitCom(previous);
   const p = filters.period;
-  // Entered in period — para qty da source
-  const entradas = (p && p !== 'comparar')
-    ? baseRows.filter(r => r.dataEntrada && matchPeriod(String(r.dataEntrada).slice(0,10), p, !!previous))
-    : baseRows;
-  // Closed in period — para ganhos/perdidos (segue lógica dataFecho)
-  const fechadas = (p && p !== 'comparar')
-    ? baseRows.filter(r => r.dataFecho && isClosedSeq(r.sequencia) && matchPeriod(String(r.dataFecho).slice(0,10), p, !!previous))
-    : baseRows.filter(r => isClosedSeq(r.sequencia));
+  const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
+
+  // Regra: cada lead é contabilizada UMA SÓ VEZ:
+  //   • Se fechada → no período de dataFecho
+  //   • Se aberta  → no período de dataEntrada
+  // "Em curso" = aberta (não fechada) com dataEntrada no período.
+  // "Ganhos/Perdidos" = fechada com dataFecho no período.
+  // "Qty" = ganhos + perdidos + emCurso (todas as leads contabilizadas no período).
+  const fechadas = baseRows.filter(r =>
+    isClosedSeq(r.sequencia) && r.dataFecho && inPeriod(r.dataFecho)
+  );
+  const abertasNoPeriodo = baseRows.filter(r =>
+    !isClosedSeq(r.sequencia) && r.dataEntrada && inPeriod(r.dataEntrada)
+  );
 
   // Reunir sources: baseline fixa + outras dinâmicas que apareçam nos dados
   const sourceSet = new Set(SOURCE_BASELINE);
-  entradas.forEach(r => sourceSet.add(normalizeSource(r.source)));
   fechadas.forEach(r => sourceSet.add(normalizeSource(r.source)));
+  abertasNoPeriodo.forEach(r => sourceSet.add(normalizeSource(r.source)));
   // Ordem: baseline na ordem definida, depois as extras alfabeticamente
   const baselineSet = new Set(SOURCE_BASELINE);
   const extras = [...sourceSet].filter(s => !baselineSet.has(s)).sort();
@@ -3493,19 +3505,19 @@ function aggregateSources(previous) {
   const stats = {};
   sources.forEach(s => stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 });
 
-  // Qty = leads que entraram no período
-  entradas.forEach(r => {
-    const s = normalizeSource(r.source);
-    if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
-    stats[s].qty++;
-    if (!isClosedSeq(r.sequencia)) stats[s].emCurso++;
-  });
-  // Ganhos / Perdidos = leads fechadas no período (por dataFecho)
+  // Ganhos / Perdidos pela dataFecho
   fechadas.forEach(r => {
     const s = normalizeSource(r.source);
     if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
-    if (isWonSeq(r.sequencia))  stats[s].ganhos++;
-    if (isLostSeq(r.sequencia)) stats[s].perdidos++;
+    if (isWonSeq(r.sequencia))  { stats[s].ganhos++;   stats[s].qty++; }
+    if (isLostSeq(r.sequencia)) { stats[s].perdidos++; stats[s].qty++; }
+  });
+  // Em curso pela dataEntrada (só leads que ainda não fecharam)
+  abertasNoPeriodo.forEach(r => {
+    const s = normalizeSource(r.source);
+    if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
+    stats[s].emCurso++;
+    stats[s].qty++;
   });
 
   const totalQty = Object.values(stats).reduce((a,v)=>a+v.qty,0);
@@ -3742,14 +3754,14 @@ function renderLeadsPanel() {
   document.getElementById("lead-ok").textContent=l.sla_ok;
   document.getElementById("lead-bad").textContent=l.sla_bad+l.sla_none;
 
-  // Conversão Closum = Lead Digital ganhos / Lead Digital total no período
+  // Conversão Closum = Lead Digital ganhos (dataFecho no período) / Lead Digital total (dataEntrada no período)
   const ldConv = aggregateLeadDigitalConv(false);
   const ganhos = ldConv.ganhos;
   const pctConv = ldConv.total ? Math.round(ganhos/ldConv.total*100) : 0;
   const elPct = document.getElementById("lead-conv-pct");
   const elSub = document.getElementById("lead-conv-sub");
   if (elPct) elPct.textContent = pctConv+"%";
-  if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Lead Digital fechadas";
+  if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Lead Digital";
 
   // ── Compare mode: inject "vs" blocks ──
   if (filters.compare) {
@@ -5283,7 +5295,9 @@ function isLostSeq(seqName) {
 function normalizeSource(s) {
   const v = String(s||'').trim();
   if (!v) return 'Lead Digital';
-  if (v.toUpperCase() === 'LEADS') return 'Contacto Direto Clube';
+  const upper = v.toUpperCase();
+  if (upper === 'LEADS') return 'Contacto Direto Clube';
+  if (upper === 'WI')    return 'Walk-in não convertido';
   return v;
 }
 // Possíveis "var" do campo source nos custom_fields do Closum
