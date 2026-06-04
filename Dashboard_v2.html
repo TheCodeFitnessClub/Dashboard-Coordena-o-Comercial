@@ -2836,6 +2836,36 @@ function aggregateInputs(previous) {
     conv:sum("conv"),             n:rows.length,
   };
 }
+// Conversão Closum (Lead Digital): ganhos Lead Digital / total Lead Digital FECHADAS no período
+// Numerador: leads source=Lead Digital + ganhas + dataFecho no período
+// Denominador: leads source=Lead Digital + fechadas (ganho ou perdido) + dataFecho no período
+// Aplica também filtros de unidade/comercial.
+function aggregateLeadDigitalConv(previous) {
+  let rows = state.leads || [];
+  const cmp   = previous && filters.compare && filters.compareParams ? filters.compareParams : null;
+  const unitF = cmp ? (cmp.unitB || "") : filters.unit;
+  const comF  = cmp ? (cmp.comB  || "") : filters.com;
+  if (unitF) {
+    const membros = (state.equipa||[]).filter(e=>e.unidade===unitF&&e.estado!=="Inativo").map(e=>e.comercial).filter(Boolean);
+    rows = rows.filter(r => membros.includes(r.comercial));
+  }
+  if (comF) rows = rows.filter(r => r.comercial === comF);
+  // Filtrar source = Lead Digital e estar fechada com dataFecho
+  rows = rows.filter(r =>
+    normalizeSource(r.source) === 'Lead Digital'
+    && isClosedSeq(r.sequencia)
+    && r.dataFecho
+  );
+  // Filtrar período por dataFecho
+  const p = filters.period;
+  if (p && p !== 'comparar') {
+    rows = rows.filter(r => matchPeriod(String(r.dataFecho).slice(0,10), p, !!previous));
+  }
+  const ganhos = rows.filter(r => isWonSeq(r.sequencia)).length;
+  const total  = rows.length;
+  return { total, ganhos };
+}
+
 // Devolve leads fechadas (ganho/perdido) filtradas por dataFecho no período seleccionado
 // Aplica os mesmos filtros de unidade/comercial que aggregateLeads
 function aggregateLeadsClosed(previous) {
@@ -3184,13 +3214,10 @@ function renderDashboard() {
   const el = document.getElementById('dash-kpis');
   if (el) {
     const l  = aggregateLeads();
-    // Conversão usa leads FECHADAS no período (por dataFecho), não pela entrada
-    const closed = aggregateLeadsClosed(false);
-    const ganhos = closed.rows.filter(r=>{
-      const v=(r.sequencia||r.resultado||'').toLowerCase();
-      return v.includes('ganho')||v.includes('won')||v.includes('adesão')||v.includes('ades');
-    }).length;
-    const convPct = closed.total ? Math.round(ganhos/closed.total*100) : 0;
+    // Conversão Closum = Lead Digital ganhos / Lead Digital total no período (por dataEntrada)
+    const ldConv = aggregateLeadDigitalConv(false);
+    const ganhos = ldConv.ganhos;
+    const convPct = ldConv.total ? Math.round(ganhos/ldConv.total*100) : 0;
     const convCls = convPct>=20?'good':convPct>=10?'warn':'bad';
 
     const {aggUnit} = _dashSociosData();
@@ -3223,12 +3250,9 @@ function renderDashboard() {
     let aggUnitP = null, getObjP = null;
     if (filters.compare) {
       lP = aggregateLeads(true);
-      const closedP = aggregateLeadsClosed(true);
-      ganhosP = closedP.rows.filter(r=>{
-        const v=(r.sequencia||r.resultado||'').toLowerCase();
-        return v.includes('ganho')||v.includes('won')||v.includes('adesão')||v.includes('ades');
-      }).length;
-      convPctP = closedP.total ? Math.round(ganhosP/closedP.total*100) : 0;
+      const ldConvP = aggregateLeadDigitalConv(true);
+      ganhosP  = ldConvP.ganhos;
+      convPctP = ldConvP.total ? Math.round(ganhosP/ldConvP.total*100) : 0;
       tempoP = lP.tempo_medio;
       // Sócios — compare-side aggregator: uses side-B period range
       const allSociosRows = [...state.socios].filter(r=>r.periodo);
@@ -3515,47 +3539,58 @@ function renderConvSourceDisplay() {
 function renderConvSourceChart() {
   const ctx = document.getElementById('chart-conv-source');
   if (!ctx) return;
-  const { sources, stats, totalQty } = aggregateSources(false);
+  const { sources, stats } = aggregateSources(false);
 
-  const labels = [], data = [], colors = [];
+  // Para cada source: % ganhos = ganhos / (ganhos + perdidos) × 100
+  // (mesma lógica da Conversão Closum: % de win entre as fechadas no período)
+  const labels = [], data = [], colors = [], tooltipMeta = [];
   sources.forEach((s, i) => {
-    const q = stats[s].qty;
-    if (q > 0) {
-      labels.push(s);
-      data.push(q);
-      colors.push(SOURCE_COLORS[i % SOURCE_COLORS.length]);
-    }
+    const st = stats[s];
+    const fechadas = (st.ganhos || 0) + (st.perdidos || 0);
+    const pct = fechadas > 0 ? Math.round((st.ganhos / fechadas) * 100) : 0;
+    labels.push(s);
+    data.push(pct);
+    colors.push(SOURCE_COLORS[i % SOURCE_COLORS.length]);
+    tooltipMeta.push({ ganhos: st.ganhos || 0, fechadas });
   });
+
   if (charts.convSource) charts.convSource.destroy();
-  if (totalQty === 0) {
-    charts.convSource = new Chart(ctx, {
-      type: 'doughnut',
-      data: { labels: ['Sem dados'], datasets: [{ data: [1], backgroundColor: ['rgba(255,255,255,.08)'], borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: {
-          title: { display: true, text: 'Conversão por Source' },
-          legend: { display: false },
-          tooltip: { enabled: false },
-        },
-      },
-    });
-    return;
-  }
   charts.convSource = new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 1, borderColor: 'rgba(0,0,0,.2)' }] },
-    options: { responsive: true, maintainAspectRatio: false,
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '% Negócio Ganho',
+        data,
+        backgroundColor: colors.map(c => c + 'CC'),
+        borderColor: colors,
+        borderWidth: 1,
+        borderRadius: 4,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
       plugins: {
-        title: { display: true, text: 'Conversão por Source' },
-        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+        title: { display: true, text: '% Negócio Ganho por Tipo de Lead' },
+        legend: { display: false },
         tooltip: {
           callbacks: {
             label: (c) => {
-              const v = c.raw || 0;
-              const pct = totalQty ? Math.round((v/totalQty)*100) : 0;
-              return ` ${c.label}: ${v} (${pct}%)`;
+              const m = tooltipMeta[c.dataIndex] || { ganhos:0, fechadas:0 };
+              return ` ${c.parsed.y}%  (${m.ganhos} de ${m.fechadas} fechadas)`;
             },
           },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, autoSkip: false, maxRotation: 30, minRotation: 0 } },
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { callback: (v) => v + '%', font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,.05)' },
         },
       },
     },
@@ -3707,27 +3742,21 @@ function renderLeadsPanel() {
   document.getElementById("lead-ok").textContent=l.sla_ok;
   document.getElementById("lead-bad").textContent=l.sla_bad+l.sla_none;
 
-  // Conversão: negócios ganhos / total fechados (filtrados por dataFecho)
-  const closed = aggregateLeadsClosed(false);
-  const ganhos = closed.rows.filter(r=>{
-    const v=(r.sequencia||r.resultado||'').toLowerCase();
-    return v.includes('ganho')||v.includes('won')||v.includes('adesão')||v.includes('ades');
-  }).length;
-  const pctConv = closed.total ? Math.round(ganhos/closed.total*100) : 0;
+  // Conversão Closum = Lead Digital ganhos / Lead Digital total no período
+  const ldConv = aggregateLeadDigitalConv(false);
+  const ganhos = ldConv.ganhos;
+  const pctConv = ldConv.total ? Math.round(ganhos/ldConv.total*100) : 0;
   const elPct = document.getElementById("lead-conv-pct");
   const elSub = document.getElementById("lead-conv-sub");
   if (elPct) elPct.textContent = pctConv+"%";
-  if (elSub) elSub.textContent = ganhos+" ganhos de "+closed.total+" fechados";
+  if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Lead Digital fechadas";
 
   // ── Compare mode: inject "vs" blocks ──
   if (filters.compare) {
     const lP = aggregateLeads(true);
-    const closedP = aggregateLeadsClosed(true);
-    const ganhosP = closedP.rows.filter(r=>{
-      const v=(r.sequencia||r.resultado||'').toLowerCase();
-      return v.includes('ganho')||v.includes('won')||v.includes('adesão')||v.includes('ades');
-    }).length;
-    const pctConvP = closedP.total ? Math.round(ganhosP/closedP.total*100) : 0;
+    const ldConvP = aggregateLeadDigitalConv(true);
+    const ganhosP = ldConvP.ganhos;
+    const pctConvP = ldConvP.total ? Math.round(ganhosP/ldConvP.total*100) : 0;
     injectVs('lead-total',    compareKpi(l.total,            lP.total));
     injectVs('lead-ok',       compareKpi(l.sla_ok,           lP.sla_ok));
     injectVs('lead-bad',      compareKpi(l.sla_bad+l.sla_none, lP.sla_bad+lP.sla_none));
@@ -5478,9 +5507,15 @@ async function doSyncClosum(silent = false) {
       const motivoPerdido = cfListMain
         ? (cfListMain.find(f => f.var === 'motivo-de-negocio-perdido')?.value || (detailMap[al.id] || ''))
         : (detailMap[al.id] || '');
-      // Source: 1º tentar custom_fields do listing, 2º sourceMap do detalhe, 3º fallback "Lead Digital"
-      const sourceRaw = extractSourceFromCustom(cfListMain) || sourceMap[al.id] || '';
-      const source = normalizeSource(sourceRaw);
+      // Source: SÓ é considerada "encontrada" se vier do listing OU do detalhe.
+      // Se nenhuma fonte trouxer source, NÃO defaultar para "Lead Digital" aqui —
+      // deixar `sourceFound = ''` para que o código abaixo:
+      //   • em leads existentes: NÃO sobrescreva o valor já guardado
+      //   • em leads novas: aplique o default uma vez só no momento de criação
+      const sourceFromListing = extractSourceFromCustom(cfListMain);
+      const sourceFromDetail  = sourceMap[al.id] || '';
+      const sourceFound = sourceFromListing || sourceFromDetail; // pode ser ''
+      const source = sourceFound ? normalizeSource(sourceFound) : '';
 
       const nomeKey = (al.name||'').trim().toLowerCase();
       if (byId[lid]) {
@@ -5516,6 +5551,8 @@ async function doSyncClosum(silent = false) {
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
         if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
         if (motivoPerdido && ex.motivoPerdido !== motivoPerdido) { ex.motivoPerdido = motivoPerdido; changed = true; }
+        // Só atualiza source se REALMENTE encontrámos uma neste sync (listing ou detalhe).
+        // Se source é '' (não veio nada nesta iteração), preservamos o valor já guardado.
         if (source && ex.source !== source) { ex.source = source; changed = true; }
         if (changed) atualizadas++;
       } else {
@@ -5531,7 +5568,8 @@ async function doSyncClosum(silent = false) {
           nome:                 al.name || '',
           origem:               'Closum',
           canal:                'Closum',
-          source,
+          // Lead nova: aplica default "Lead Digital" caso o sync não tenha trazido source
+          source:               source || 'Lead Digital',
           dataEntrada,
           comercial:            closumUserToComercial(userMap[al.user_id]),
           dataPrimeiroContacto: dpcGuardado || dpcFromSeq,
