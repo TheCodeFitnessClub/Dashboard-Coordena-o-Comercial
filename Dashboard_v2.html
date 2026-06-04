@@ -1133,7 +1133,6 @@ const SCHEMA = {
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
-    { key:"dataFecho",            label:"Data Fecho",           type:"datetime",      w:170 },
   ]},
   cancelamentos: { label:"Cancelamentos", pageSize:10, sortBy:"periodo", sortDir:"asc", fields:[
     { key:"periodo",        label:"Período (Mês ou Semana)", type:"text",     w:160 },
@@ -2692,11 +2691,6 @@ function updateCell(schemaKey, idx, key, value) {
   const f = SCHEMA[schemaKey].fields.find(x=>x.key===key);
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
   else state[schemaKey][idx][key] = value;
-  // Quando o utilizador edita manualmente a dataFecho de uma lead,
-  // marcar como manual para o sync nunca mais a sobrescrever
-  if (schemaKey === "leads" && key === "dataFecho") {
-    state[schemaKey][idx].dataFechoManual = value && String(value).trim() ? true : false;
-  }
   saveState();
   // Live-update computed cells for leads
   if (schemaKey==="leads"&&(key==="dataEntrada"||key==="dataPrimeiroContacto")) {
@@ -5419,28 +5413,25 @@ async function doSyncClosum(silent = false) {
       if (page > 200) break; // safety cap
     }
 
-    // Deduplicar state.leads por leadId — PRIORIZA leads com dataFechoManual=true
-    // (para nunca perder edições manuais por duplicação)
+    // Deduplicar state.leads por leadId — mantém apenas a MAIS RECENTE.
+    // As duplicadas antigas são apagadas automaticamente.
     {
+      const _ts = v => { const t = Date.parse(String(v||'').replace(' ','T')); return isNaN(t)?0:t; };
+      // "Recência" = data mais avançada entre fecho / 1º contacto / entrada
+      const recency = l => Math.max(_ts(l.dataFecho), _ts(l.dataPrimeiroContacto), _ts(l.dataEntrada));
       const byIdAll = {};
       state.leads.forEach(l => {
         if (!l.leadId) return;
-        if (!byIdAll[l.leadId]) { byIdAll[l.leadId] = l; return; }
         const winner = byIdAll[l.leadId];
-        // Se algum dos duplicados tem flag manual, esse ganha
-        if (l.dataFechoManual && !winner.dataFechoManual) { byIdAll[l.leadId] = l; return; }
-        // Se ambos têm ou nenhum tem, manter a com mais dados (heurística simples)
-        if (!winner.dataFechoManual && !l.dataFechoManual) {
-          const wScore = (winner.dataFecho?1:0) + (winner.motivoPerdido?1:0);
-          const lScore = (l.dataFecho?1:0) + (l.motivoPerdido?1:0);
-          if (lScore > wScore) byIdAll[l.leadId] = l;
-        }
+        if (!winner) { byIdAll[l.leadId] = l; return; }
+        // Fica a mais recente; em caso de empate fica a última encontrada
+        if (recency(l) >= recency(winner)) byIdAll[l.leadId] = l;
       });
       const originalCount = state.leads.length;
       const manuals = state.leads.filter(l => !l.leadId); // criadas manualmente sem leadId
       state.leads = [...Object.values(byIdAll), ...manuals];
       const removed = originalCount - state.leads.length;
-      if (removed > 0) console.log('[Closum sync] Removidas', removed, 'leads duplicadas (preservadas as com dataFechoManual)');
+      if (removed > 0) console.log('[Closum sync] Removidas', removed, 'leads duplicadas (mantida a mais recente)');
     }
 
     // Índice de leads existentes por CLO-{id}
@@ -5624,20 +5615,13 @@ async function doSyncClosum(silent = false) {
           ex.sequencia = seqResultado;
           changed = true;
           // Quando passa para uma sequência fechada (ganho/perdido), guardar data de fecho
-          // — excepto se a lead tem dataFechoManual (foi editada manualmente)
           if (isClosedSeq(seqResultado)) {
-            if (!ex.dataFechoManual) {
-              ex.dataFecho = seqTs || getCurrentLocalDatetime();
-            } else {
-              console.log('[Closum sync] dataFecho protegida (manual):', ex.leadId, ex.nome);
-            }
+            ex.dataFecho = seqTs || getCurrentLocalDatetime();
           }
         } else if (isClosedSeq(seqResultado) && !ex.dataFecho) {
-          if (!ex.dataFechoManual) {
-            // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
-            ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
-            if (ex.dataFecho) changed = true;
-          }
+          // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
+          ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
+          if (ex.dataFecho) changed = true;
         }
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
         if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
