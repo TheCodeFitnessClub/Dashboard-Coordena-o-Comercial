@@ -2412,6 +2412,10 @@ const _tblSearch = {};   // current search per containerId
 function renderTable(containerId, schemaKey, opts) {
   opts = opts||{};
   const c = document.getElementById(containerId); if (!c) return;
+  // Preservar foco e cursor do input de pesquisa antes do re-render
+  const ae = document.activeElement;
+  const hadSearchFocus = ae && ae.dataset && ae.dataset.searchFor === containerId;
+  const cursorPos = hadSearchFocus ? ae.selectionStart : null;
   const sch      = SCHEMA[schemaKey];
   const rows     = state[schemaKey]||[];
   const custCols = state.customCols[schemaKey]||[];
@@ -2448,7 +2452,7 @@ function renderTable(containerId, schemaKey, opts) {
 
   const ci = escapeHtml(containerId), sk = escapeHtml(schemaKey);
   let html = '<div class="tbl-wrap"><div class="tbl-search">';
-  html += '<input placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="renderTable(\''+ci+'\',\''+sk+'\',{search:this.value})">';
+  html += '<input data-search-for="'+ci+'" placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="renderTable(\''+ci+'\',\''+sk+'\',{search:this.value})">';
   html += '<span class="count">'+filtered.length+' de '+rows.length+'</span></div>';
   html += '<table class="tbl"><thead><tr>';
   sch.fields.forEach(f => { html+='<th style="min-width:'+(f.w||100)+'px">'+f.label+'</th>'; });
@@ -2497,6 +2501,15 @@ function renderTable(containerId, schemaKey, opts) {
 
   html += '<button class="btn-add-col" onclick="addCustomCol(\''+sk+'\')">⊕ Adicionar coluna</button>';
   c.innerHTML = html;
+  // Restaurar foco no input de pesquisa (perdido com o re-render do innerHTML)
+  if (hadSearchFocus) {
+    const newInput = c.querySelector('input[data-search-for="'+containerId+'"]');
+    if (newInput) {
+      newInput.focus();
+      const pos = cursorPos != null ? cursorPos : newInput.value.length;
+      try { newInput.setSelectionRange(pos, pos); } catch(_) {}
+    }
+  }
 }
 
 
@@ -2525,6 +2538,10 @@ function renderInputsKpis() {
 
 function renderInputsGrouped(containerId) {
   const c = document.getElementById(containerId); if (!c) return;
+  // Preservar foco e posição do cursor do input de pesquisa antes do re-render
+  const ae = document.activeElement;
+  const hadSearchFocus = ae && ae.dataset && ae.dataset.searchFor === containerId;
+  const cursorPos = hadSearchFocus ? ae.selectionStart : null;
   const sch = SCHEMA["inputs"];
   const rows = state["inputs"] || [];
   const custCols = state.customCols["inputs"] || [];
@@ -2564,7 +2581,7 @@ function renderInputsGrouped(containerId) {
   const sumLabels = { leadsRec:"Leads", contAng:"REF", pos:"POS", chamadasEf:"Cham. ef.", chamadasAt:"Cham. at.", marc:"Marc.", marcDia:"Marc. dia", visitas:"Visitas", conv:"Conv.", walkin:"Walk-in", walkinSale:"WI sale" };
 
   let html = '<div class="tbl-wrap"><div class="tbl-search">';
-  html += '<input placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="_tblSearch[\''+containerId+'\']=this.value;_inputsPage=1;renderInputsGrouped(\''+containerId+'\')">';
+  html += '<input data-search-for="'+containerId+'" placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="_tblSearch[\''+containerId+'\']=this.value;_inputsPage=1;renderInputsGrouped(\''+containerId+'\')">';
   html += '<span class="count">'+filtered.length+' de '+rows.length+(totalDays>0?' · '+totalDays+(totalDays===1?' dia':' dias'):'')+'</span></div>';
   html += '<table class="tbl"><tbody>';
 
@@ -2633,6 +2650,15 @@ function renderInputsGrouped(containerId) {
 
   html += '<button class="btn-add-col" onclick="addCustomCol(\'inputs\')">&#x2295; Adicionar coluna</button>';
   c.innerHTML = html;
+  // Restaurar foco no input de pesquisa (perdido por causa do re-render)
+  if (hadSearchFocus) {
+    const newInput = c.querySelector('input[data-search-for="'+containerId+'"]');
+    if (newInput) {
+      newInput.focus();
+      const pos = cursorPos != null ? cursorPos : newInput.value.length;
+      try { newInput.setSelectionRange(pos, pos); } catch(_) {}
+    }
+  }
 }
 
 const INPUTS_PAGE_SIZE = 10;
@@ -2665,6 +2691,11 @@ function updateCell(schemaKey, idx, key, value) {
   const f = SCHEMA[schemaKey].fields.find(x=>x.key===key);
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
   else state[schemaKey][idx][key] = value;
+  // Quando o utilizador edita manualmente a dataFecho de uma lead,
+  // marcar como manual para o sync nunca mais a sobrescrever
+  if (schemaKey === "leads" && key === "dataFecho") {
+    state[schemaKey][idx].dataFechoManual = value && String(value).trim() ? true : false;
+  }
   saveState();
   // Live-update computed cells for leads
   if (schemaKey==="leads"&&(key==="dataEntrada"||key==="dataPrimeiroContacto")) {
@@ -5554,10 +5585,11 @@ async function doSyncClosum(silent = false) {
           ex.sequencia = seqResultado;
           changed = true;
           // Quando passa para uma sequência fechada (ganho/perdido), guardar data de fecho
-          if (isClosedSeq(seqResultado)) {
+          // — excepto se a lead tem dataFechoManual (foi editada manualmente)
+          if (isClosedSeq(seqResultado) && !ex.dataFechoManual) {
             ex.dataFecho = seqTs || getCurrentLocalDatetime();
           }
-        } else if (isClosedSeq(seqResultado) && !ex.dataFecho) {
+        } else if (isClosedSeq(seqResultado) && !ex.dataFecho && !ex.dataFechoManual) {
           // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
           ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
           if (ex.dataFecho) changed = true;
