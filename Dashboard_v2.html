@@ -5257,13 +5257,16 @@ function normalizeSource(s) {
   if (v.toUpperCase() === 'LEADS') return 'Contacto Direto Clube';
   return v;
 }
-// Extrai a source da lead do Closum, tentando vários nomes de campo
-function extractSource(al) {
-  // Tenta os nomes mais prováveis na API do Closum
-  return normalizeSource(
-    al.source || al.lead_source || al.origin || al.channel ||
-    al.source_name || al.acquisition_channel || ''
-  );
+// Possíveis "var" do campo source nos custom_fields do Closum
+const SOURCE_VARS = ['source','lead-source','leadsource','origem','origin','canal','channel'];
+// Extrai a source de um array de custom_fields/custom_data do Closum
+function extractSourceFromCustom(cfList) {
+  if (!Array.isArray(cfList)) return '';
+  for (const f of cfList) {
+    const v = String(f.var || '').toLowerCase();
+    if (SOURCE_VARS.includes(v) && f.value) return String(f.value);
+  }
+  return '';
 }
 function getSeqTimestamp(seq) {
   if (!seq) return '';
@@ -5368,9 +5371,17 @@ async function doSyncClosum(silent = false) {
       if (l.leadId) savedDPCById[l.leadId] = dpc;
     });
 
+    // Flag local para o backfill ÚNICO de source (depois de termos corrigido a lógica
+    // de extração — agora lê dos custom_fields). Forçar refetch em todas as leads
+    // até o backfill estar concluído.
+    const SOURCE_BACKFILL_FLAG = 'closum_source_backfill_v2_done';
+    const sourceBackfillDone = (() => {
+      try { return localStorage.getItem(SOURCE_BACKFILL_FLAG) === '1'; } catch(_) { return false; }
+    })();
+
     // Identificar leads que precisam de detalhe individual:
     //  (a) sequência "perdido/lost/não interessado" sem motivo no listing → buscar motivoPerdido
-    //  (b) leads sem `source` guardada (backfill no primeiro sync) → buscar source
+    //  (b) source: 1ª vez (backfill pendente) busca para TODAS; depois, só para leads sem source
     const needsDetailSet = new Set();
     const needsMotivo = new Set();
     const needsSource = new Set();
@@ -5385,17 +5396,19 @@ async function doSyncClosum(silent = false) {
                    : Array.isArray(al.custom_data)   ? al.custom_data
                    : null;
       const listingHasMotivo = cfList && cfList.some(f => f.var === 'motivo-de-negocio-perdido' && f.value);
-      const listingHasSource = !!(al.source || al.lead_source || al.origin || al.channel || al.source_name || al.acquisition_channel);
+      // Source está num custom_field do Closum (mesma estrutura do motivo)
+      const listingHasSource = !!extractSourceFromCustom(cfList);
 
       // (a) Motivo de negócio perdido
       if (isPerdido && !listingHasMotivo) {
         needsDetailSet.add(al.id);
         needsMotivo.add(al.id);
       }
-      // (b) Backfill de source: lead ainda não tem source guardada e listing também não a tem
+      // (b) Source: se o backfill ainda não foi concluído, força fetch para TODAS as leads
+      //     que não tenham source no listing. Caso contrário, só para leads sem source guardada.
       const ex = byId[lid];
-      const exHasSource = ex && ex.source && String(ex.source).trim();
-      if (!exHasSource && !listingHasSource) {
+      const exHasSource = ex && ex.source && String(ex.source).trim() && ex.source !== 'Lead Digital';
+      if (!listingHasSource && (!sourceBackfillDone || !exHasSource)) {
         needsDetailSet.add(al.id);
         needsSource.add(al.id);
       }
@@ -5404,12 +5417,16 @@ async function doSyncClosum(silent = false) {
     console.log('[Closum sync] Leads a buscar detalhe:', needsDetail.length,
                 '(motivos:', needsMotivo.size, ', sources:', needsSource.size, ') de', allApiLeads.length);
 
-    // Buscar detalhe em paralelo, em batches de 10 (max 300 por sync — para acomodar backfill)
+    // Buscar detalhe em paralelo, em batches de 10
+    //  - Em modo backfill (1º sync após esta versão): sem limite, para apanhar todas as leads
+    //  - Em modo normal: máx 300 por sync (suficiente para perdidos novos)
     const detailMap   = {}; // id → motivoPerdido
     const sourceMap   = {}; // id → source
     let firstDetailLogged = false;
-    const idsToFetch = needsDetail.slice(0, 300);
+    const maxFetch = sourceBackfillDone ? 300 : needsDetail.length;
+    const idsToFetch = needsDetail.slice(0, maxFetch);
     const BATCH_SIZE = 10;
+    console.log('[Closum sync] Backfill source:', sourceBackfillDone ? 'JÁ FEITO' : 'EM CURSO — vai buscar detalhe para', idsToFetch.length, 'leads');
     for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
       const batch = idsToFetch.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (id) => {
@@ -5421,22 +5438,25 @@ async function doSyncClosum(silent = false) {
           const dData = await dResp.json();
           if (!firstDetailLogged) {
             console.log('[Closum sync] Estrutura do detalhe (1º lead):', dData);
+            const ldDbg = dData.responseData?.lead_data || dData.responseData || {};
+            const cdDbg = ldDbg.custom_fields || ldDbg.custom_data || [];
+            if (Array.isArray(cdDbg) && cdDbg.length) {
+              console.log('[Closum sync] Custom fields disponíveis no 1º lead:',
+                cdDbg.map(f => ({ var: f.var, value: f.value })));
+            }
             firstDetailLogged = true;
           }
           const ld = dData.responseData?.lead_data || dData.responseData || {};
-          // Motivo (custom fields)
+          // Motivo e Source vêm AMBOS do mesmo array de custom_fields do Closum
           const cd = ld.custom_fields || ld.custom_data
                   || dData.responseData?.custom_fields
                   || null;
           if (Array.isArray(cd)) {
             const mot = cd.find(f => f.var === 'motivo-de-negocio-perdido')?.value || '';
             if (mot) detailMap[id] = mot;
+            const src = extractSourceFromCustom(cd);
+            if (src) sourceMap[id] = src;
           }
-          // Source
-          const src = ld.source || ld.lead_source || ld.origin || ld.channel
-                   || ld.source_name || ld.acquisition_channel
-                   || dData.responseData?.source || '';
-          if (src) sourceMap[id] = String(src);
         } catch(e) {
           console.warn('[Closum sync] Erro a buscar detalhe da lead', id, e.message);
         }
@@ -5458,10 +5478,8 @@ async function doSyncClosum(silent = false) {
       const motivoPerdido = cfListMain
         ? (cfListMain.find(f => f.var === 'motivo-de-negocio-perdido')?.value || (detailMap[al.id] || ''))
         : (detailMap[al.id] || '');
-      // Source: 1º tentar listing, 2º tentar detalhe (sourceMap do backfill), 3º fallback "Lead Digital"
-      const sourceRaw = al.source || al.lead_source || al.origin || al.channel
-                     || al.source_name || al.acquisition_channel
-                     || sourceMap[al.id] || '';
+      // Source: 1º tentar custom_fields do listing, 2º sourceMap do detalhe, 3º fallback "Lead Digital"
+      const sourceRaw = extractSourceFromCustom(cfListMain) || sourceMap[al.id] || '';
       const source = normalizeSource(sourceRaw);
 
       const nomeKey = (al.name||'').trim().toLowerCase();
@@ -5539,6 +5557,8 @@ async function doSyncClosum(silent = false) {
     const now = getCurrentLocalDatetime();
     saveAPISettings({...s, lastSync: now, lastSyncNovos: novos, lastSyncAtualizadas: atualizadas});
     updateSyncBadge();
+    // Marcar backfill de source como concluído após sync bem sucedido
+    try { localStorage.setItem('closum_source_backfill_v2_done', '1'); } catch(_) {}
 
     if (elStatus) {
       elStatus.innerHTML = `<span style="color:var(--green)">✓ Sincronizado às ${now.split('T')[1]} · ${novos} nova${novos!==1?'s':''} · ${atualizadas} actualizada${atualizadas!==1?'s':''}</span>`;
