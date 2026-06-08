@@ -33,9 +33,14 @@ body.light-mode table.tbl th{background:#1E293B}
 body.light-mode table.tbl tbody tr:hover td{background:rgba(0,0,0,.025)}
 /* Date / datetime inputs */
 body.light-mode table.tbl td input[type="date"],
-body.light-mode table.tbl td input[type="datetime-local"]{background:#F8FAFC;color:#1E293B;color-scheme:light}
+body.light-mode table.tbl td input[type="datetime-local"],
+body.light-mode table.tbl td select{background:#F8FAFC;color:#1E293B;color-scheme:light;border-color:rgba(0,0,0,.12)}
+body.light-mode table.tbl td input[type="date"]:hover,
+body.light-mode table.tbl td input[type="datetime-local"]:hover,
+body.light-mode table.tbl td select:hover{border-color:rgba(0,0,0,.25)}
 body.light-mode table.tbl td input[type="date"]:focus,
-body.light-mode table.tbl td input[type="datetime-local"]:focus{background:#EEF2F7}
+body.light-mode table.tbl td input[type="datetime-local"]:focus,
+body.light-mode table.tbl td select:focus{background:#EEF2F7;border-color:var(--orange)}
 /* Table selects */
 body.light-mode table.tbl td select{background:#F8FAFC;color:#1E293B}
 body.light-mode table.tbl td select option{background:#FFFFFF;color:#1E293B}
@@ -226,13 +231,32 @@ table.tbl tbody tr:hover td{background:rgba(255,255,255,.04)}
 table.tbl td.act{text-align:center;padding:4px}
 table.tbl td.computed{padding:7px 12px;color:var(--grey);font-style:italic;font-size:12px}
 table.tbl td input,table.tbl td textarea{width:100%;border:none;background:transparent;padding:8px 12px;font-family:inherit;font-size:13px;color:inherit;outline:none;transition:background .15s}
-table.tbl td input[type="date"],table.tbl td input[type="datetime-local"]{background:#1e1e1e;color:#E2E8F0;color-scheme:dark;cursor:pointer}
-table.tbl td input[type="date"]:focus,table.tbl td input[type="datetime-local"]:focus{background:#252525}
-table.tbl td select{width:100%;border:none;background:#1e1e1e;color:#E2E8F0;padding:8px 12px;font-family:inherit;font-size:13px;outline:none;transition:background .15s;cursor:pointer}
+table.tbl td input[type="date"],
+table.tbl td input[type="datetime-local"],
+table.tbl td select{
+  width:calc(100% - 12px);
+  margin:4px 6px;
+  border:1.5px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:var(--bg);
+  color:#E2E8F0;
+  color-scheme:dark;
+  padding:6px 10px;
+  font-family:inherit;
+  font-size:12.5px;
+  outline:none;
+  cursor:pointer;
+  transition:border-color .15s, background .15s;
+}
 table.tbl td select option{background:#1e1e1e;color:#E2E8F0}
 table.tbl td select option:checked{background:#F97316;color:#000}
+table.tbl td input[type="date"]:hover,
+table.tbl td input[type="datetime-local"]:hover,
+table.tbl td select:hover{border-color:var(--grey)}
+table.tbl td input[type="date"]:focus,
+table.tbl td input[type="datetime-local"]:focus,
+table.tbl td select:focus{border-color:var(--orange);background:rgba(249,115,22,.04);box-shadow:none}
 table.tbl td input:focus,table.tbl td textarea:focus{background:rgba(249,115,22,.06);box-shadow:inset 0 0 0 2px var(--orange)}
-table.tbl td select:focus{background:#252525;box-shadow:inset 0 0 0 2px var(--orange)}
 table.tbl td textarea{resize:vertical;min-height:34px}
 table.tbl td.num input{text-align:right;font-variant-numeric:tabular-nums}
 table.tbl tr.cell-good td:first-child{box-shadow:inset 3px 0 0 var(--green)}
@@ -579,6 +603,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="sidebar-section-label">Operacional</div>
     <button class="sidebar-nav-item active" data-tab="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
     <button class="sidebar-nav-item" data-tab="kpis"><span class="nav-icon">📊</span>KPIs</button>
+    <button class="sidebar-nav-item" data-tab="closum"><span class="nav-icon">📇</span>CRM - Closum</button>
     <button class="sidebar-nav-item" data-tab="tarefas"><span class="nav-icon">✓</span>Tarefas</button>
     <button class="sidebar-nav-item" data-tab="reunioes"><span class="nav-icon">📅</span>Reuniões</button>
     <button class="sidebar-nav-item" data-tab="ficheiros"><span class="nav-icon">🗂</span>Ficheiros</button>
@@ -651,8 +676,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="chart-wrap" style="height:300px"><canvas id="chart-socios-dash"></canvas></div>
     <div class="chart-wrap" style="height:300px"><canvas id="chart-vendas-dash"></canvas></div>
     <div class="chart-wrap" style="height:300px"><canvas id="chart-obj-dash"></canvas></div>
-    <div class="chart-wrap" style="height:300px"><canvas id="chart-conv-source"></canvas></div>
-    <div class="chart-wrap" style="height:300px"><canvas id="chart-motivos-perdido"></canvas></div>
   </div>
 </section>
 
@@ -662,7 +685,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 <section class="panel" id="panel-kpis">
   <nav class="sub-tabs" data-group="kpis">
     <button class="active" data-subtab="inputs">Inputs Diários</button>
-    <button data-subtab="leads">Leads Closum</button>
     <button data-subtab="kpisM">KPIs</button>
   </nav>
 
@@ -689,23 +711,51 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="t-inputs"></div>
   </div>
 
-  <!-- Leads -->
-  <div class="sub-panel" data-subpanel="leads">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:9px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);gap:10px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span id="leads-sync-status" style="font-size:11px;color:var(--grey)">A verificar sincronização…</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button id="btn-sync-closum" onclick="manualSyncClosum()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🔄 Sincronizar Closum</button>
-      </div>
+  <!-- KPIs Mensais -->
+  <div class="sub-panel" data-subpanel="kpisM">
+    <div id="kpim-panel"></div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════
+     CRM - CLOSUM
+══════════════════════════════════════════ -->
+<section class="panel" id="panel-closum">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:9px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);gap:10px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span id="leads-sync-status" style="font-size:11px;color:var(--grey)">A verificar sincronização…</span>
     </div>
-    <div class="grid c4" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <button id="btn-sync-closum" onclick="manualSyncClosum()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🔄 Sincronizar Closum</button>
+    </div>
+  </div>
+
+  <nav class="sub-tabs" data-group="closum">
+    <button class="active" data-subtab="dados">Dados &amp; Gráficos</button>
+    <button data-subtab="tabela">Leads</button>
+  </nav>
+
+  <!-- Dados & Gráficos -->
+  <div class="sub-panel active" data-subpanel="dados">
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:12px">
       <div class="kpi"><div class="lbl">Leads totais</div><div class="val" id="lead-total"></div><div class="sub">Acumulado até ao período</div></div>
-      <div class="kpi good"><div class="lbl">SLA cumprido</div><div class="val" id="lead-ok"></div><div class="sub">≤ 60 min</div></div>
-      <div class="kpi bad"><div class="lbl">SLA violado / sem contacto</div><div class="val" id="lead-bad"></div><div class="sub">Acção imediata</div></div>
       <div class="kpi" style="border-left:3px solid #22C55E"><div class="lbl">Conversão Closum</div><div class="val" id="lead-conv-pct" style="color:#22C55E"></div><div class="sub" id="lead-conv-sub">negócios ganhos / total</div></div>
+      <div class="kpi" id="lead-tempo-card"><div class="lbl">Tempo médio de 1.º contacto</div><div class="val" id="lead-tempo-medio"></div><div class="sub">Closum → 1.º contacto (todos os clubes)</div></div>
     </div>
+    <div class="dash-section-label">Leads &amp; Estado de Sequência</div>
     <div id="lead-seq-states" class="grid" style="margin-bottom:18px"></div>
+    <div class="dash-section-label">Conversão por Source</div>
+    <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px"></div>
+    <div class="dash-section-label">Motivos de Negócio Perdido</div>
+    <div id="motivos-perdido-display" class="grid c4" style="margin-bottom:18px"></div>
+    <div class="grid c2" style="gap:18px">
+      <div class="chart-wrap" style="height:300px"><canvas id="chart-conv-source"></canvas></div>
+      <div class="chart-wrap" style="height:300px"><canvas id="chart-motivos-perdido"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Leads (tabela) -->
+  <div class="sub-panel" data-subpanel="tabela">
     <h2 class="section">Leads (tempo de resposta automático)
       <span class="actions">
         <button onclick="addRow('leads')" class="primary">+ Adicionar lead</button>
@@ -715,11 +765,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="t-leads"></div>
     <div id="lead-warning-novo-zone"></div>
     <div id="lead-warning-zone"></div>
-  </div>
-
-  <!-- KPIs Mensais -->
-  <div class="sub-panel" data-subpanel="kpisM">
-    <div id="kpim-panel"></div>
   </div>
 </section>
 
@@ -1142,7 +1187,7 @@ const SCHEMA = {
     { key:"ficheiro",       label:"Ficheiro (Excel/PDF)",    type:"file",     w:220 },
     { key:"notas",          label:"Notas",                   type:"textarea", w:240 },
   ]},
-  socios: { label:"Sócios", pageSize:10, sortBy:"periodo", sortDir:"asc", fields:[
+  socios: { label:"Sócios", pageSize:10, sortBy:"periodo", sortDir:"desc", fields:[
     { key:"periodo",      label:"Período (AAAA-MM)",  type:"text",          w:130 },
     { key:"unidade",      label:"Unidade",             type:"select", options:UNIDADES, w:170 },
     { key:"ativosInicio", label:"Ativos início",       type:"number",        w:110 },
@@ -1712,6 +1757,19 @@ function computeCrescimento(r) {
 function computeChurn(r) {
   const i = Number(r.ativosInicio)||0; if (!i) return "";
   return (((Number(r.cancelamentos)||0)/i)*100).toFixed(1)+"%";
+}
+// Churn mensal médio: para cada mês, churn = cancelamentos / ativos início × 100;
+// depois devolve a MÉDIA das taxas dos meses com dados. null se não houver dados.
+function _churnMensalMedio(uRows) {
+  const taxas = (uRows||[])
+    .filter(r => (Number(r.ativosInicio)||0) > 0)
+    .map(r => (Number(r.cancelamentos)||0) / (Number(r.ativosInicio)||0) * 100);
+  if (!taxas.length) return null;
+  return taxas.reduce((a,b)=>a+b,0) / taxas.length;
+}
+// Período da aba horizontal inferior a um mês (não faz sentido mostrar churn mensal)
+function _periodoAbaixoDeMes() {
+  return filters.period === 'dia' || filters.period === 'semana';
 }
 function computeRetencao(r) {
   const i = Number(r.ativosInicio)||0; if (!i) return "";
@@ -2558,11 +2616,14 @@ function renderInputsGrouped(containerId) {
     groups[d].push({row, idx});
   });
 
-  // Sort groups by date desc (parse DD/MM/AAAA)
+  // Sort groups by date desc (aceita AAAA-MM-DD e DD/MM/AAAA)
   const parseInputDate = s => {
     if (!s || s === "—") return 0;
-    const p = s.split("/");
-    if (p.length === 3) { const d = new Date(p[2], p[1]-1, p[0]); return isNaN(d.getTime())?0:d.getTime(); }
+    s = String(s).trim();
+    let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);   // AAAA-MM-DD
+    if (m) { const d = new Date(+m[1], +m[2]-1, +m[3]); return isNaN(d.getTime())?0:d.getTime(); }
+    m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);       // DD/MM/AAAA
+    if (m) { const d = new Date(+m[3], +m[2]-1, +m[1]); return isNaN(d.getTime())?0:d.getTime(); }
     return 0;
   };
   groupOrder.sort((a, b) => parseInputDate(b) - parseInputDate(a));
@@ -2942,6 +3003,18 @@ function aggregateLeads(previous) {
     sla_bad:  slaArr.filter(s=>s==="VIOLADO").length,
     sla_none: slaArr.filter(s=>s==="Sem contacto").length,
   };
+}
+// Tempo médio de 1.º contacto (min) por clube — respeita a aba horizontal (período).
+// Devolve null se não houver leads com tempo de resposta no período.
+function tempoMedioContactoPorClube(u) {
+  const membros = (state.equipa||[]).filter(e=>e.unidade===u&&e.estado!=="Inativo")
+                                    .map(e=>e.comercial).filter(Boolean);
+  let rows = state.leads.filter(r=>membros.includes(r.comercial));
+  const p = filters.period;
+  if (p && p!=='comparar') rows = rows.filter(r=>r.dataEntrada&&matchPeriod(String(r.dataEntrada).slice(0,10),p,false));
+  rows = rows.filter(r=>r.dataEntrada && String(r.dataEntrada).slice(0,10) > SLA_CUTOFF);
+  const tempos = rows.map(r=>computeTempoResp(r)).filter(t=>t!==""&&t>0);
+  return tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
 }
 function performancePorComercial() {
   return state.equipa.filter(e=>e.estado!=="Inativo").map(eq=>{
@@ -3325,27 +3398,30 @@ function renderDashboard() {
       };
     }
 
-    // Row 1: Leads + Resposta + Crescimento
-    h += '<div class="dash-section-label">Leads & Resposta</div>';
-    h += '<div class="grid c4" style="margin-bottom:4px">';
-    h += _kpiCard('Leads totais', l.total, 'no período filtrado', '', null,
-      lP ? compareKpi(l.total, lP.total) : '');
-    h += _kpiCard('Conversão Closum', convPct+'%', ganhos+' ganhos de '+ldConv.total+' Lead Digital', convCls, null,
-      lP ? compareKpi(convPct, convPctP, {unit:'%'}) : '');
-    h += _kpiCard('Tempo médio de resposta', tempo ? tempo+' min' : '', 'Closum → 1.º contacto', tempoCls, null,
-      lP ? compareKpi(tempo, tempoP, {format:n=>(n>0?n+' min':'')}) : '');
-    h += _kpiCard('Taxa de crescimento', tCresc!==null?(tCresc>=0?'+':'')+tCresc.toFixed(1)+'%':'', 'global — fim vs. início', crescCls);
-    h += '</div>';
+    // Row 1: Dados gerais do negócio (Churn + Crescimento + Total de sócios)
+    const churnSubMes = _periodoAbaixoDeMes();
+    let churnGlobal = null;
+    if (!churnSubMes) {
+      const {allRows: _sociosRows, sel: _sociosSel} = _dashSociosData();
+      const _byMonth = {};
+      _sociosRows.filter(r => _sociosSel.includes(r.periodo)).forEach(r => {
+        const m = r.periodo;
+        if (!_byMonth[m]) _byMonth[m] = {canc:0, ini:0};
+        _byMonth[m].canc += Number(r.cancelamentos)||0;
+        _byMonth[m].ini  += Number(r.ativosInicio)||0;
+      });
+      const _taxas = Object.values(_byMonth).filter(x=>x.ini>0).map(x=>x.canc/x.ini*100);
+      churnGlobal = _taxas.length ? _taxas.reduce((a,b)=>a+b,0)/_taxas.length : null;
+    }
+    const churnVal = churnSubMes ? '' : (churnGlobal!==null ? churnGlobal.toFixed(1)+'%' : '');
+    const churnCls = churnGlobal===null ? 'none' : churnGlobal<=3 ? 'good' : churnGlobal<=6 ? 'warn' : 'bad';
+    const churnSub = churnSubMes ? 'período inferior a um mês' : 'média do churn mensal';
 
-    // Row 2: Sócios por clube
-    h += '<div class="dash-section-label">Total de sócios</div>';
-    h += '<div class="grid" style="grid-template-columns:repeat('+cols+',1fr);gap:14px;margin-bottom:4px">';
-    unitsShow.forEach(u=>{
-      const a=aggUnit(u);
-      const aP = aggUnitP ? aggUnitP(u) : null;
-      const vs = aP ? compareKpi(a?a.fim:0, aP.fim) : '';
-      h += _kpiCard(u, a!=null?a.fim:'', 'sócios ativos', '', 'border-left:3px solid var(--orange)', vs);
-    });
+    h += '<div class="dash-section-label">Dados gerais do negócio</div>';
+    h += '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:4px">';
+    h += _kpiCard('Churn', churnVal, churnSub, churnCls);
+    h += _kpiCard('Taxa de crescimento', tCresc!==null?(tCresc>=0?'+':'')+tCresc.toFixed(1)+'%':'', 'global — fim vs. início', crescCls);
+    h += _kpiCard('Total de sócios', tFim || '', 'sócios ativos (todos os clubes)', '');
     h += '</div>';
 
     // Row 3: Média mensal de vendas por clube
@@ -3354,6 +3430,16 @@ function renderDashboard() {
     unitsShow.forEach(u=>{
       const med=getMedia(u);
       h += _kpiCard(u, med.toFixed(1), 'vendas/mês (histórico)', '');
+    });
+    h += '</div>';
+
+    // Row 3a2: Tempo médio 1.º contacto por clube (respeita período)
+    h += '<div class="dash-section-label">Tempo médio 1.º contacto — por clube</div>';
+    h += '<div class="grid" style="grid-template-columns:repeat('+cols+',1fr);gap:14px;margin-bottom:4px">';
+    unitsShow.forEach(u=>{
+      const t = tempoMedioContactoPorClube(u);
+      const cls = t===null ? 'none' : t<=30 ? 'good' : t<=60 ? 'warn' : 'bad';
+      h += _kpiCard(u, t!==null ? t+' min' : '', 'Closum → 1.º contacto', cls);
     });
     h += '</div>';
 
@@ -3379,14 +3465,6 @@ function renderDashboard() {
     h += _kpiCard('One',     totPlanos>0 ? pctONE+'%'  : '', totONE+' planos',  '', 'border-left:3px solid #22C55E');
     h += _kpiCard('Plus',    totPlanos>0 ? pctPLUS+'%' : '', totPLUS+' planos', '', 'border-left:3px solid #F97316');
     h += '</div>';
-
-    // Row 3b2: Conversão por Source (imediatamente acima dos Motivos de Negócio Perdido)
-    h += '<div class="dash-section-label">Conversão por Source</div>';
-    h += '<div id="conv-source-display" class="grid c4" style="margin-bottom:4px"></div>';
-
-    // Row 3c: Motivos de Negócio Perdido
-    h += '<div class="dash-section-label">Motivos de Negócio Perdido</div>';
-    h += '<div id="motivos-perdido-display" class="grid c4" style="margin-bottom:4px"></div>';
 
     // Row 4: Objetivos por clube (anchor month) com barra de progresso
     h += '<div class="dash-section-label">Objetivo de vendas — '+escapeHtml(mesLbl)+'</div>';
@@ -3416,18 +3494,11 @@ function renderDashboard() {
     el.innerHTML = h;
   }
 
-  // ── Conversão por Source (cards) ───────────────────────
-  renderConvSourceDisplay();
-  // ── Motivos de Negócio Perdido (cards) ─────────────────
-  renderMotivosPerdidoDisplay();
-
   // ── Charts ──────────────────────────────────────────────
   renderTempoRespChart();
   renderSociosDashChart();
   renderVendasDashChart();
   renderObjDashChart();
-  renderConvSourceChart();
-  renderMotivosPerdidoChart();
 }
 
 function renderSociosDashChart() {
@@ -3562,13 +3633,15 @@ function renderConvSourceDisplay() {
     const pctP = total > 0 ? Math.round((st.perdidos/total)*100) : 0;
     const pctE = total > 0 ? Math.round((st.emCurso/total)*100)  : 0;
     const color = SOURCE_COLORS[i % SOURCE_COLORS.length];
-    return `<div class="kpi" style="border-left:3px solid ${color}">
-      <div class="lbl" style="font-size:10.5px">${escapeHtml(s)}</div>
-      <div class="val">${total}<span style="font-size:11px;color:var(--grey);font-weight:400;margin-left:4px">leads</span></div>
-      <div class="sub" style="display:flex;flex-direction:column;gap:2px;font-size:10.5px;margin-top:4px">
-        <span style="color:#22C55E">● ${st.ganhos} ganhos (${pctG}%)</span>
-        <span style="color:#F87171">● ${st.perdidos} perdidos (${pctP}%)</span>
-        <span style="color:#60A5FA">● ${st.emCurso} em curso (${pctE}%)</span>
+    // 3 cards em cima (span 2 de 6) + 2 cards em baixo (span 3 de 6) — os de baixo ocupam o mesmo espaço total que os de cima.
+    const span = i < 3 ? 2 : 3;
+    return `<div class="kpi" style="border-left:3px solid ${color};grid-column:span ${span}">
+      <div class="lbl">${escapeHtml(s)}</div>
+      <div class="val">${total}</div>
+      <div class="sub">
+        <span style="color:#22C55E">${st.ganhos} ganhos (${pctG}%)</span> ·
+        <span style="color:#F87171">${st.perdidos} perdidos (${pctP}%)</span> ·
+        <span style="color:#60A5FA">${st.emCurso} em curso (${pctE}%)</span>
       </div>
     </div>`;
   }).join('');
@@ -3777,8 +3850,6 @@ function renderLeadsPanel() {
     rowsAcum=rowsAcum.filter(r=>r.dataEntrada&&String(r.dataEntrada).slice(0,10)<=endStr);
   }
   document.getElementById("lead-total").textContent=rowsAcum.length;
-  document.getElementById("lead-ok").textContent=l.sla_ok;
-  document.getElementById("lead-bad").textContent=l.sla_bad+l.sla_none;
 
   // Conversão Closum = Lead Digital ganhos (dataFecho no período) / Lead Digital total (dataEntrada no período)
   const ldConv = aggregateLeadDigitalConv(false);
@@ -3789,40 +3860,54 @@ function renderLeadsPanel() {
   if (elPct) elPct.textContent = pctConv+"%";
   if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Lead Digital";
 
+  // Tempo médio de 1.º contacto (todos os clubes) — respeita o período/unit/com global
+  const tempoEl = document.getElementById("lead-tempo-medio");
+  const tempoCardEl = document.getElementById("lead-tempo-card");
+  if (tempoEl) tempoEl.textContent = l.tempo_medio ? l.tempo_medio+" min" : "";
+  if (tempoCardEl) {
+    const tempoCls = l.tempo_medio>0 && l.tempo_medio<=30 ? 'good'
+                    : l.tempo_medio>0 && l.tempo_medio<=60 ? 'warn'
+                    : l.tempo_medio>0 ? 'bad' : '';
+    tempoCardEl.className = 'kpi'+(tempoCls?' '+tempoCls:'');
+  }
+
   // ── Compare mode: inject "vs" blocks ──
   if (filters.compare) {
     const lP = aggregateLeads(true);
     const ldConvP = aggregateLeadDigitalConv(true);
     const ganhosP = ldConvP.ganhos;
     const pctConvP = ldConvP.total ? Math.round(ganhosP/ldConvP.total*100) : 0;
-    injectVs('lead-total',    compareKpi(l.total,            lP.total));
-    injectVs('lead-ok',       compareKpi(l.sla_ok,           lP.sla_ok));
-    injectVs('lead-bad',      compareKpi(l.sla_bad+l.sla_none, lP.sla_bad+lP.sla_none));
-    injectVs('lead-conv-pct', compareKpi(pctConv,            pctConvP, {unit:'%'}));
+    injectVs('lead-total',       compareKpi(l.total,         lP.total));
+    injectVs('lead-conv-pct',    compareKpi(pctConv,         pctConvP, {unit:'%'}));
+    injectVs('lead-tempo-medio', compareKpi(l.tempo_medio,   lP.tempo_medio, {format:n=>(n>0?n+' min':'')}));
   } else {
-    ['lead-total','lead-ok','lead-bad','lead-conv-pct'].forEach(id => injectVs(id, ''));
+    ['lead-total','lead-conv-pct','lead-tempo-medio'].forEach(id => injectVs(id, ''));
   }
 
-  // Leads por estado de sequência
-  // "Novo" é tratado à parte: representa o total de leads recebidas no período
-  const bySeq={};
+  // Leads por estado de sequência — lista fixa e ordem fixa.
+  // Cada lead é classificada num dos 7 buckets; cards aparecem sempre (mesmo com 0).
+  const SEQ_FIXED_LABELS = ['Negócio Ganho','Negócio Perdido','Primeiro Contacto','Follow up','Visita Marcada','Visita Efetuada','Proposta Apresentada'];
+  function _classifySeq(s) {
+    const v = String(s||'').toLowerCase();
+    if (/ganho|won|ades/.test(v))               return 'Negócio Ganho';
+    if (/perdido|lost|não interessado/.test(v)) return 'Negócio Perdido';
+    if (/proposta/.test(v))                     return 'Proposta Apresentada';
+    if (/efetuad|efectuad|realizad/.test(v))    return 'Visita Efetuada';
+    if (/visita|marcou|agendou/.test(v))        return 'Visita Marcada';
+    if (/follow|segundo|2º/.test(v))            return 'Follow up';
+    if (/primeiro|1º|first/.test(v))            return 'Primeiro Contacto';
+    return null;
+  }
+  const bySeq = Object.fromEntries(SEQ_FIXED_LABELS.map(k=>[k,0]));
   l.rows.forEach(r=>{
-    const s=r.sequencia||r.resultado||"";
-    if (s==="Novo") return; // excluído da grelha dinâmica
-    bySeq[s]=(bySeq[s]||0)+1;
+    const k = _classifySeq(r.sequencia||r.resultado||'');
+    if (k && bySeq[k]!==undefined) bySeq[k]++;
   });
   const seqEl=document.getElementById("lead-seq-states");
   if (seqEl) {
-    const entries=Object.entries(bySeq).sort((a,b)=>b[1]-a[1]);
-    // Card fixo "Novo" com o total de leads recebidas no período
-    const novoCard='<div class="kpi" style="border-left:3px solid '+seqColor('Novo')+'">'
-      +'<div class="lbl">Novo</div>'
-      +'<div class="val" style="color:'+seqColor('Novo')+'">'+l.total+'</div>'
-      +'<div class="sub">leads recebidas no período</div>'
-      +'</div>';
-    const cols=Math.min(Math.max(entries.length+1,2),4);
-    seqEl.style.gridTemplateColumns='repeat('+cols+',1fr)';
-    seqEl.innerHTML=novoCard+entries.map(([s,n])=>{
+    seqEl.style.gridTemplateColumns='repeat('+SEQ_FIXED_LABELS.length+',1fr)';
+    seqEl.innerHTML=SEQ_FIXED_LABELS.map(s=>{
+      const n=bySeq[s];
       const col=seqColor(s);
       const pct=l.total?Math.round(n/l.total*100):0;
       return '<div class="kpi" style="border-left:3px solid '+col+'">'
@@ -3832,6 +3917,13 @@ function renderLeadsPanel() {
         +'</div>';
     }).join('');
   }
+  // ── Conversão por Source (movida da dashboard) ──────────
+  renderConvSourceDisplay();
+  renderConvSourceChart();
+  // ── Motivos de Negócio Perdido (movido da dashboard) ────
+  renderMotivosPerdidoDisplay();
+  renderMotivosPerdidoChart();
+
   renderLeadWarningNovo();
   renderLeadWarning();
 }
@@ -4154,17 +4246,18 @@ function renderSociosStats() {
   h+='<div class="socios-duo-item"><div class="socios-duo-lbl">Média mensal</div><div class="socios-duo-val yellow">'+fmtAvg(tAvgVendas)+'</div></div>';
   h+='</div>'+vsBlock(tVendas, tVendasP)+'</div></div>';
 
-  // Section 4: Churn
+  // Section 4: Churn — média das taxas mensais no período (nada se período < mês)
+  const churnSubMes = _periodoAbaixoDeMes();
   h+='<div class="socios-section-lbl" style="margin-top:28px">Churn — por clube</div>';
   h+='<div class="socios-grid" style="grid-template-columns:repeat(3,1fr)">';
   units.forEach(u=>{
-    const a=aggUnit(u);
-    const c=a&&a.ativosInicio?a.cancelamentos/a.ativosInicio*100:null;
-    const cv=c!==null?c.toFixed(1)+"%":"";
+    const uRows = rows.filter(r=>r.unidade===u);
+    const c = churnSubMes ? null : _churnMensalMedio(uRows);
+    const cv = churnSubMes ? "—" : (c!==null?c.toFixed(1)+"%":"");
     const cls=c===null?"none":c<=3?"good":c<=6?"warn":"bad";
     h+='<div class="socios-single-card"><div class="club">'+escapeHtml(u)+'</div>';
     h+='<div class="big-val"><span class="badge-pct '+cls+'">'+cv+'</span></div>';
-    h+='<div class="big-sub">cancelamentos / sócios início</div></div>';
+    h+='<div class="big-sub">'+(churnSubMes?'período inferior a um mês':'média do churn mensal')+'</div></div>';
   });
   h+='</div>';
 
@@ -4202,14 +4295,14 @@ function drawSociosCharts(allRows, selRows) {
   charts.sociosEvol=new Chart(ctx1,{type:"line",
     data:{labels:periods,datasets:units.map((u,i)=>({label:u,data:periods.map(p=>{const r=allRows.find(x=>x.periodo===p&&x.unidade===u);return r?computeSociosFim(r):null;}),borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+"18",tension:.35,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:colors[i%colors.length],borderWidth:2}))},
     options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:"Sócios ativos por unidade"}},scales:{x:{grid:{display:false}},y:{beginAtZero:false}}}});
-  // Churn chart — uses only rows from the selected period(s)
+  // Churn chart — média das taxas mensais no período (vazio se período < mês)
+  const churnSubMes = _periodoAbaixoDeMes();
   const churnRows = (selRows && selRows.length) ? selRows : allRows;
   const churnUnits = [...new Set(churnRows.map(r=>r.unidade).filter(Boolean))];
   const churnData = churnUnits.map(u => {
-    const uRows = churnRows.filter(r=>r.unidade===u);
-    const totalCanc = uRows.reduce((s,r)=>s+(Number(r.cancelamentos)||0),0);
-    const totalIni  = uRows.reduce((s,r)=>s+(Number(r.ativosInicio)||0),0);
-    return totalIni > 0 ? parseFloat((totalCanc/totalIni*100).toFixed(2)) : 0;
+    if (churnSubMes) return null;
+    const c = _churnMensalMedio(churnRows.filter(r=>r.unidade===u));
+    return c===null ? null : parseFloat(c.toFixed(2));
   });
   charts.sociosChurn=new Chart(ctx2,{type:"bar",
     data:{labels:churnUnits,datasets:[{label:"Churn %",data:churnData,backgroundColor:"#F87171",borderRadius:6,borderSkipped:false}]},
@@ -4336,9 +4429,11 @@ function initSubTabs() {
 function renderSubPanel(group, subtab) {
   if (group==="kpis") {
     if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
-    if (subtab==="leads")      renderLeadsPanel();
     if (subtab==="comerciais") renderComerciais();
     if (subtab==="kpisM")      renderKpisMensais();
+  }
+  if (group==="closum") {
+    renderLeadsPanel();
   }
   if (group==="tarefas") {
     if (subtab==="tarefas-lista") { renderKanban(); renderTable("t-tarefas","tarefas"); }
@@ -4378,6 +4473,7 @@ function renderAllForKey(schemaKey) {
     renderKanban();
   }
   if ((schemaKey==="socios"||schemaKey==="cancelamentos")&&document.getElementById("panel-socios").classList.contains("active")) renderSociosPanel();
+  if (schemaKey==="leads"&&document.getElementById("panel-closum").classList.contains("active")) renderLeadsPanel();
   if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
   if (document.getElementById("panel-kpis").classList.contains("active")) renderActiveKpisSubPanel();
   // Re-render objetivos whenever sales data or targets change
@@ -4398,6 +4494,7 @@ function renderActivePanel() {
   const tab = getActiveTab();
   if (tab==="dashboard")  renderDashboard();
   if (tab==="kpis")       renderActiveKpisSubPanel();
+  if (tab==="closum")     renderLeadsPanel();
   if (tab==="tarefas")    { const tb=document.querySelector("#panel-tarefas .sub-tabs button.active"); renderSubPanel("tarefas",tb?tb.dataset.subtab:"tarefas-lista"); }
   if (tab==="reunioes")   renderActiveReunioesSubPanel();
   if (tab==="ficheiros")  renderFicheiros();
@@ -4626,15 +4723,10 @@ function afterImportCSV(n, skipped) {
   closeModal();
   saveState();
   populateFilters();
-  // Switch to KPIs → Leads sub-tab if not already there
-  const kpisBtn = document.querySelector("#tabs button[data-tab='kpis']");
-  if (kpisBtn && !kpisBtn.classList.contains("active")) {
-    kpisBtn.click();
-    // Then activate leads sub-tab
-    setTimeout(()=>{
-      const leadsBtn = document.querySelector("#panel-kpis .sub-tabs button[data-subtab='leads']");
-      if (leadsBtn) leadsBtn.click();
-    }, 50);
+  // Switch to CRM - Closum tab if not already there
+  const closumBtn = document.querySelector("#tabs button[data-tab='closum']");
+  if (closumBtn && !closumBtn.classList.contains("active")) {
+    closumBtn.click();
   } else {
     renderLeadsPanel();
   }
@@ -5956,11 +6048,9 @@ setInterval(() => {
 }, 60 * 1000);
 // Sincronizar ao abrir (silencioso) + arrancar intervalo
 setTimeout(() => { doSyncClosum(true); startAutoSync(); }, 800);
-// Actualizar status das leads quando o sub-tab é activado
-document.querySelectorAll("#panel-kpis .sub-tabs button").forEach(btn => {
-  btn.addEventListener("click", () => {
-    if (btn.dataset.subtab === "leads") updateLeadsSyncStatus();
-  });
+// Actualizar status das leads quando a aba CRM - Closum é activada
+document.querySelectorAll("#tabs button[data-tab='closum']").forEach(btn => {
+  btn.addEventListener("click", () => updateLeadsSyncStatus());
 });
 
 // ── Log de reunião ────────────────────────────────────────────────
