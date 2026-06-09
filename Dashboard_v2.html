@@ -2675,79 +2675,88 @@ function renderInputsKpis() {
   renderInputsDailyChart();
 }
 
-// ── Inputs Diários: gráfico de evolução diária com toggles ─────────────
+// ── Inputs Diários: gráfico de evolução diária (uma métrica de cada vez) ──
 const INPUTS_DAILY_METRICS = [
-  { key:'leadsRec',   label:'Leads',          color:'#F97316', def:true  },
-  { key:'chamadasEf', label:'Cham. ef.',      color:'#22C55E', def:true  },
-  { key:'chamadasAt', label:'Cham. at.',      color:'#10B981', def:false },
-  { key:'marc',       label:'Marcações',      color:'#A855F7', def:false },
-  { key:'visitas',    label:'Visitas',        color:'#60A5FA', def:false },
-  { key:'conv',       label:'Conversões',     color:'#FBBF24', def:true  },
-  { key:'pos',        label:'POS',            color:'#94A3B8', def:false },
-  { key:'walkin',     label:'Walk-in',        color:'#F87171', def:false },
+  { key:'leadsRec',   label:'Leads',          color:'#F97316' },
+  { key:'chamadasEf', label:'Cham. ef.',      color:'#22C55E' },
+  { key:'chamadasAt', label:'Cham. at.',      color:'#10B981' },
+  { key:'marc',       label:'Marcações',      color:'#A855F7' },
+  { key:'visitas',    label:'Visitas',        color:'#60A5FA' },
+  { key:'conv',       label:'Conversões',     color:'#FBBF24' },
+  { key:'pos',        label:'POS',            color:'#94A3B8' },
+  { key:'walkin',     label:'Walk-in',        color:'#F87171' },
+  { key:'walkinSale', label:'WI sale',        color:'#EC4899' },
+  { key:'outbound',   label:'Outbound',       color:'#0EA5E9' },
+  { key:'contAng',    label:'REF',            color:'#84CC16' },
+  { key:'marcDia',    label:'Marc. dia',      color:'#D946EF' },
 ];
-let _inputsDailyVisible = null; // Set<string> de métricas ativas
-function _getInputsDailyVisible() {
-  if (_inputsDailyVisible) return _inputsDailyVisible;
-  _inputsDailyVisible = new Set(INPUTS_DAILY_METRICS.filter(m=>m.def).map(m=>m.key));
-  return _inputsDailyVisible;
-}
-function toggleInputsDailyMetric(key) {
-  const vis = _getInputsDailyVisible();
-  if (vis.has(key)) vis.delete(key); else vis.add(key);
+let _inputsDailyMetric = 'leadsRec';
+const CLUBE_COLORS = { 'Cidade Universitária':'#F97316', 'Saldanha':'#A855F7', 'Universidade Nova':'#22C55E' };
+function setInputsDailyMetric(key) {
+  _inputsDailyMetric = key;
   renderInputsDailyChart();
 }
 function renderInputsDailyChart() {
   const canvas = document.getElementById('chart-inputs-daily');
   const togglesEl = document.getElementById('inputs-daily-toggles');
   if (!canvas || !togglesEl) return;
-  const vis = _getInputsDailyVisible();
+  const metric = INPUTS_DAILY_METRICS.find(m => m.key === _inputsDailyMetric) || INPUTS_DAILY_METRICS[0];
 
-  // Render toggles
-  togglesEl.innerHTML = INPUTS_DAILY_METRICS.map(m => {
-    const active = vis.has(m.key);
-    const bg = active ? m.color : 'transparent';
-    const fg = active ? '#0A0A0A' : 'var(--grey)';
-    const border = active ? m.color : 'var(--line)';
-    return '<button onclick="toggleInputsDailyMetric(\''+m.key+'\')" '
-         + 'style="padding:4px 10px;border:1.5px solid '+border+';border-radius:20px;font-size:10.5px;background:'+bg+';color:'+fg+';cursor:pointer;font-family:inherit;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:5px">'
-         + '<span style="width:7px;height:7px;background:'+m.color+';border-radius:50%;display:inline-block"></span>'
-         + escapeHtml(m.label)+'</button>';
-  }).join('');
+  // Dropdown de métrica única
+  togglesEl.innerHTML = '<label style="font-size:11px;color:var(--grey);font-weight:600;margin-right:6px">Métrica:</label>'
+    + '<select onchange="setInputsDailyMetric(this.value)" style="padding:5px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:11.5px;background:var(--bg);color:var(--dark);font-family:inherit;font-weight:600;cursor:pointer;color-scheme:dark">'
+    + INPUTS_DAILY_METRICS.map(m =>
+        '<option value="'+m.key+'"'+(m.key===metric.key?' selected':'')+'>'+escapeHtml(m.label)+'</option>'
+      ).join('')
+    + '</select>';
 
   // Filtrar inputs pelo filtro global (período + clube + comercial)
   const rows = applyGlobalFilter(state.inputs || [], 'unidade', 'comercial', false);
-  // Agrupar por data → soma de cada métrica
-  const byDate = {};
-  rows.forEach(r => {
-    const d = String(r.data || '').slice(0,10);
-    if (!d) return;
-    if (!byDate[d]) byDate[d] = {};
-    INPUTS_DAILY_METRICS.forEach(m => {
-      byDate[d][m.key] = (byDate[d][m.key] || 0) + (Number(r[m.key]) || 0);
-    });
-  });
-  const dates = Object.keys(byDate).sort();
-  // Formato dos labels: DD/MM
-  const labels = dates.map(d => {
-    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? m[3]+'/'+m[2] : d;
-  });
 
-  const datasets = INPUTS_DAILY_METRICS
-    .filter(m => vis.has(m.key))
-    .map(m => ({
-      label: m.label,
-      data: dates.map(d => byDate[d][m.key] || 0),
-      borderColor: m.color,
-      backgroundColor: m.color + '22',
-      tension: .3,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      borderWidth: 2,
-      spanGaps: true,
-      fill: false,
-    }));
+  // Modo de séries: por clube se NENHUM clube/comercial específico estiver filtrado,
+  // senão uma única série com a métrica escolhida.
+  const splitByClub = !filters.unit && !filters.com;
+  const datasets = [];
+  const allDatesSet = new Set();
+  rows.forEach(r => { const d = String(r.data||'').slice(0,10); if (d) allDatesSet.add(d); });
+  const dates = [...allDatesSet].sort();
+  const labels = dates.map(d => { const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'/'+m[2] : d; });
+
+  if (splitByClub) {
+    const clubes = UNIDADES;
+    clubes.forEach(u => {
+      const byDate = {};
+      rows.filter(r => r.unidade === u).forEach(r => {
+        const d = String(r.data||'').slice(0,10);
+        if (!d) return;
+        byDate[d] = (byDate[d] || 0) + (Number(r[metric.key]) || 0);
+      });
+      const hasAnyData = Object.keys(byDate).length > 0;
+      if (!hasAnyData) return;
+      const color = CLUBE_COLORS[u] || '#94A3B8';
+      datasets.push({
+        label: u,
+        data: dates.map(d => byDate[d] !== undefined ? byDate[d] : null),
+        borderColor: color,
+        backgroundColor: color + '22',
+        tension: .3, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2, spanGaps: true, fill: false,
+      });
+    });
+  } else {
+    const byDate = {};
+    rows.forEach(r => {
+      const d = String(r.data||'').slice(0,10);
+      if (!d) return;
+      byDate[d] = (byDate[d] || 0) + (Number(r[metric.key]) || 0);
+    });
+    datasets.push({
+      label: metric.label + (filters.com ? ' — '+filters.com : (filters.unit ? ' — '+filters.unit : '')),
+      data: dates.map(d => byDate[d] !== undefined ? byDate[d] : null),
+      borderColor: metric.color,
+      backgroundColor: metric.color + '22',
+      tension: .3, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2, spanGaps: true, fill: false,
+    });
+  }
 
   if (charts.inputsDaily) charts.inputsDaily.destroy();
   charts.inputsDaily = new Chart(canvas, {
@@ -2758,7 +2767,8 @@ function renderInputsDailyChart() {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        title: { display: true, text: metric.label + (splitByClub ? ' — por clube' : '') },
+        legend: { display: true, labels: { font: { size: 11 } } },
         tooltip: { mode: 'index', intersect: false },
       },
       scales: {
