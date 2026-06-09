@@ -747,8 +747,8 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
         <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Saldanha','Íris')">
       </label>
       <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
-        Nova
-        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Nova','Diogo')">
+        Universidade Nova
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Universidade Nova','Diogo')">
       </label>
       <span id="import-club-status" style="font-size:11px;color:var(--grey);margin-left:auto"></span>
     </div>
@@ -6484,9 +6484,26 @@ function _runOneShotCleanupInputs() {
   }
 }
 
+// Migração one-shot: renomear unidade "Nova" → "Universidade Nova" nas linhas existentes
+function _runOneShotMigrateNova() {
+  const FLAG = 'migrateNova_v1';
+  if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
+  let changed = 0;
+  (state.inputs||[]).forEach(r => {
+    if (r.unidade === 'Nova') { r.unidade = 'Universidade Nova'; changed++; }
+  });
+  if (!state.__cleanupDone) state.__cleanupDone = {};
+  state.__cleanupDone[FLAG] = true;
+  if (changed > 0) {
+    console.log('[migrate] Renomeadas', changed, 'linhas de "Nova" → "Universidade Nova"');
+    saveState();
+  }
+}
+
 if (SERVER_SYNC) {
   pullStateFromServer().then(changed => {
     _runOneShotCleanupInputs();
+    _runOneShotMigrateNova();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   });
   // Polling a cada 30 segundos — mantém todos os utilizadores sincronizados
