@@ -807,14 +807,14 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="motivos-perdido-display" class="grid c4" style="margin-bottom:18px"></div>
     <div class="grid c2" style="gap:18px">
       <div class="chart-wrap" style="height:300px"><canvas id="chart-conv-source"></canvas></div>
-      <div class="chart-wrap" style="height:300px;display:flex;flex-direction:column">
-        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:6px">
-          <label style="font-size:11px;color:var(--grey);font-weight:600">Source:</label>
-          <select id="motivos-source-filter" onchange="renderMotivosPerdidoChart()" style="padding:4px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:11px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
+      <div class="chart-wrap" style="height:300px;position:relative">
+        <div style="position:absolute;top:10px;right:14px;z-index:2;display:flex;align-items:center;gap:6px;background:var(--card-bg);padding:3px 6px;border-radius:var(--radius-sm)">
+          <label style="font-size:10.5px;color:var(--grey);font-weight:600">Source:</label>
+          <select id="motivos-source-filter" onchange="renderMotivosPerdidoChart()" style="padding:3px 8px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:10.5px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
             <option value="">Total</option>
           </select>
         </div>
-        <div style="flex:1;position:relative"><canvas id="chart-motivos-perdido"></canvas></div>
+        <canvas id="chart-motivos-perdido"></canvas>
       </div>
     </div>
   </div>
