@@ -143,7 +143,7 @@ const FIELD_MAP = {
   'OUT':       'outbound',
 };
 
-// ── Encode share URL → OneDrive Shares API endpoint ──────────────────────────
+// ── Encode share URL → base64url (formato exigido pelo Shares API) ───────────
 function encodeShareUrl(shareUrl) {
   return Buffer.from(shareUrl).toString('base64')
     .replace(/=+$/, '')
@@ -151,21 +151,57 @@ function encodeShareUrl(shareUrl) {
     .replace(/\+/g, '-');
 }
 
-// ── Download .xlsx from OneDrive share link (no auth needed) ─────────────────
+// ── Extrai o link canónico (1drv.ms) do parâmetro "redeem" do URL longo ──────
+function getCanonicalShareUrl(url) {
+  try {
+    const u = new URL(url);
+    const redeem = u.searchParams.get('redeem');
+    if (redeem) {
+      const b64 = redeem.replace(/-/g,'+').replace(/_/g,'/');
+      const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+      const decoded = Buffer.from(b64 + pad, 'base64').toString('utf-8');
+      if (decoded.startsWith('http')) return decoded;
+    }
+  } catch (_) {}
+  return url;
+}
+
+// ── Download .xlsx — tenta vários endpoints até um funcionar ─────────────────
 async function downloadShared(shareUrl) {
-  const b64 = encodeShareUrl(shareUrl);
-  const apiUrl = `https://api.onedrive.com/v1.0/shares/u!${b64}/root/content`;
+  const canonical = getCanonicalShareUrl(shareUrl);
+  const b64canonical = encodeShareUrl(canonical);
+  const b64original  = encodeShareUrl(shareUrl);
 
-  let res = await fetch(apiUrl, { redirect: 'follow' });
-  if (res.ok) return Buffer.from(await res.arrayBuffer());
+  const attempts = [
+    { name: 'graph/shares (canonical)',    url: `https://graph.microsoft.com/v1.0/shares/u!${b64canonical}/driveItem/content` },
+    { name: 'api.onedrive/shares (canonical)', url: `https://api.onedrive.com/v1.0/shares/u!${b64canonical}/root/content` },
+    { name: 'api.onedrive/shares (original)',  url: `https://api.onedrive.com/v1.0/shares/u!${b64original}/root/content` },
+    { name: 'canonical + download=1', url: canonical + (canonical.includes('?')?'&':'?') + 'download=1' },
+    { name: 'original + download=1',  url: shareUrl + (shareUrl.includes('?')?'&':'?') + 'download=1' },
+  ];
 
-  // Fallback: append download=1
-  const sep = shareUrl.includes('?') ? '&' : '?';
-  const dlUrl = shareUrl + sep + 'download=1';
-  res = await fetch(dlUrl, { redirect: 'follow' });
-  if (res.ok) return Buffer.from(await res.arrayBuffer());
+  const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; TheCode-Dashboard/2.0)' };
+  const errors = [];
 
-  throw new Error(`HTTP ${res.status} fetching shared file`);
+  for (const a of attempts) {
+    try {
+      const res = await fetch(a.url, { redirect: 'follow', headers });
+      if (!res.ok) { errors.push(`${a.name}: HTTP ${res.status}`); continue; }
+      const buf = Buffer.from(await res.arrayBuffer());
+      // Sanity: ficheiros .xlsx começam sempre por PK (assinatura ZIP, 50 4B)
+      if (buf.length > 200 && buf[0] === 0x50 && buf[1] === 0x4B) {
+        console.log(`[Excel sync] ✓ download via ${a.name} (${buf.length} bytes)`);
+        return buf;
+      }
+      // Pode ter recebido HTML (página de login/redirect)
+      const snippet = buf.slice(0, 80).toString('utf-8').replace(/\s+/g,' ').slice(0, 60);
+      errors.push(`${a.name}: not xlsx (${buf.length}B, "${snippet}")`);
+    } catch (e) {
+      errors.push(`${a.name}: ${e.message}`);
+    }
+  }
+
+  throw new Error('all methods failed → ' + errors.join(' | '));
 }
 
 // ── Normalize date cell value → "YYYY-MM-DD" ─────────────────────────────────
