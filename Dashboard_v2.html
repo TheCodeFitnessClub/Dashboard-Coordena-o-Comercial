@@ -803,7 +803,15 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="lead-seq-states" class="grid" style="margin-bottom:18px"></div>
     <div class="dash-section-label">Conversão por Source</div>
     <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px"></div>
-    <div class="dash-section-label">Motivos de Negócio Perdido</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+      <div class="dash-section-label" style="margin:0">Motivos de Negócio Perdido</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:11px;color:var(--grey);font-weight:600">Source:</label>
+        <select id="motivos-source-filter" onchange="renderMotivosPerdidoDisplay();renderMotivosPerdidoChart()" style="padding:5px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
+          <option value="">Total</option>
+        </select>
+      </div>
+    </div>
     <div id="motivos-perdido-display" class="grid c4" style="margin-bottom:18px"></div>
     <div class="grid c2" style="gap:18px">
       <div class="chart-wrap" style="height:300px"><canvas id="chart-conv-source"></canvas></div>
@@ -3896,10 +3904,17 @@ const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5F
 function aggregateMotivosPerdidos(previous) {
   // Filtra por dataFecho (data em que a lead foi marcada como perdida no Closum)
   const l = aggregateLeadsClosed(previous);
+  // Filtro de source (vindo do dropdown da secção)
+  const srcEl = document.getElementById('motivos-source-filter');
+  const srcFilter = srcEl ? srcEl.value : '';
   const counts = {};
   MOTIVO_OPTIONS.forEach(m => counts[m] = 0);
   let total = 0;
+  const sourcesPresentes = new Set();
   l.rows.forEach(r => {
+    const ns = normalizeSource(r.source);
+    if (ns) sourcesPresentes.add(ns);
+    if (srcFilter && ns !== srcFilter) return;
     const mot = (r.motivoPerdido || '').trim();
     if (!mot) return;
     if (counts.hasOwnProperty(mot)) {
@@ -3909,7 +3924,24 @@ function aggregateMotivosPerdidos(previous) {
     }
     total++;
   });
+  // Sincroniza opções do dropdown com as sources existentes
+  _populateMotivosSourceFilter(sourcesPresentes);
   return { counts, total };
+}
+
+function _populateMotivosSourceFilter(sourcesSet) {
+  const sel = document.getElementById('motivos-source-filter');
+  if (!sel) return;
+  const current = sel.value;
+  const sources = [...sourcesSet].sort();
+  const opts = ['<option value="">Total</option>']
+    .concat(sources.map(s => '<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>'));
+  // Só re-renderiza se as opções mudaram (evita perder o foco)
+  const newHtml = opts.join('');
+  if (sel.innerHTML !== newHtml) {
+    sel.innerHTML = newHtml;
+    if (sources.includes(current) || current === '') sel.value = current;
+  }
 }
 
 function renderMotivosPerdidoDisplay() {
