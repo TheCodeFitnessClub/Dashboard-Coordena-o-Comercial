@@ -803,19 +803,19 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="lead-seq-states" class="grid" style="margin-bottom:18px"></div>
     <div class="dash-section-label">Conversão por Source</div>
     <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-      <div class="dash-section-label" style="margin:0">Motivos de Negócio Perdido</div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:11px;color:var(--grey);font-weight:600">Source:</label>
-        <select id="motivos-source-filter" onchange="renderMotivosPerdidoDisplay();renderMotivosPerdidoChart()" style="padding:5px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
-          <option value="">Total</option>
-        </select>
-      </div>
-    </div>
+    <div class="dash-section-label">Motivos de Negócio Perdido</div>
     <div id="motivos-perdido-display" class="grid c4" style="margin-bottom:18px"></div>
     <div class="grid c2" style="gap:18px">
       <div class="chart-wrap" style="height:300px"><canvas id="chart-conv-source"></canvas></div>
-      <div class="chart-wrap" style="height:300px"><canvas id="chart-motivos-perdido"></canvas></div>
+      <div class="chart-wrap" style="height:300px;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:6px">
+          <label style="font-size:11px;color:var(--grey);font-weight:600">Source:</label>
+          <select id="motivos-source-filter" onchange="renderMotivosPerdidoChart()" style="padding:4px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:11px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
+            <option value="">Total</option>
+          </select>
+        </div>
+        <div style="flex:1;position:relative"><canvas id="chart-motivos-perdido"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -3901,12 +3901,9 @@ const MOTIVO_OPTIONS = [
 const MOTIVO_CUTOFF = '2026-06-01';
 const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8'];
 
-function aggregateMotivosPerdidos(previous) {
+function aggregateMotivosPerdidos(previous, sourceFilter) {
   // Filtra por dataFecho (data em que a lead foi marcada como perdida no Closum)
   const l = aggregateLeadsClosed(previous);
-  // Filtro de source (vindo do dropdown da secção)
-  const srcEl = document.getElementById('motivos-source-filter');
-  const srcFilter = srcEl ? srcEl.value : '';
   const counts = {};
   MOTIVO_OPTIONS.forEach(m => counts[m] = 0);
   let total = 0;
@@ -3914,7 +3911,7 @@ function aggregateMotivosPerdidos(previous) {
   l.rows.forEach(r => {
     const ns = normalizeSource(r.source);
     if (ns) sourcesPresentes.add(ns);
-    if (srcFilter && ns !== srcFilter) return;
+    if (sourceFilter && ns !== sourceFilter) return;
     const mot = (r.motivoPerdido || '').trim();
     if (!mot) return;
     if (counts.hasOwnProperty(mot)) {
@@ -3947,7 +3944,8 @@ function _populateMotivosSourceFilter(sourcesSet) {
 function renderMotivosPerdidoDisplay() {
   const el = document.getElementById('motivos-perdido-display');
   if (!el) return;
-  const { counts, total } = aggregateMotivosPerdidos(false);
+  // Cards mostram sempre o TOTAL (não obedecem ao filtro de source do gráfico)
+  const { counts, total } = aggregateMotivosPerdidos(false, '');
   el.innerHTML = MOTIVO_OPTIONS.map((m, i) => {
     const c = counts[m] || 0;
     const pct = total > 0 ? Math.round((c/total)*100) : 0;
@@ -3962,7 +3960,10 @@ function renderMotivosPerdidoDisplay() {
 function renderMotivosPerdidoChart() {
   const ctx = document.getElementById('chart-motivos-perdido');
   if (!ctx) return;
-  const { counts, total } = aggregateMotivosPerdidos(false);
+  // Gráfico obedece ao dropdown de Source (Total ou tipo específico)
+  const srcEl = document.getElementById('motivos-source-filter');
+  const srcFilter = srcEl ? srcEl.value : '';
+  const { counts, total } = aggregateMotivosPerdidos(false, srcFilter);
   const labels = [], data = [], colors = [];
   MOTIVO_OPTIONS.forEach((m, i) => {
     if ((counts[m] || 0) > 0) {
