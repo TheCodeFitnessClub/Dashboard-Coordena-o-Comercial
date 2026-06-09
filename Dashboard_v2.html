@@ -5630,8 +5630,9 @@ function importClubReport(inputEl, unidade, comercial) {
         return;
       }
       const sheet = wb.Sheets[sheetName];
+      const todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
       const rows = _reportParseSheet(sheet, year)
-        .filter(r => r.data >= REPORT_CUTOFF)
+        .filter(r => r.data >= REPORT_CUTOFF && r.data <= todayStr)
         .map(r => ({ ...r, unidade, comercial }));
 
       // Substitui no state.inputs: remove existentes desta unidade+mês, adiciona novas
