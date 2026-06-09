@@ -48,20 +48,11 @@ app.get('/api/state', async (req, res) => {
   }
 });
 
-// ── API: guardar estado ───────────────────────────────────────────────────────
-// Estratégia: shallow JSONB merge (data || incoming) — campos do utilizador
-// passam, mas inputs/excelSync (geridos pelo sync) nunca são tocados aqui
-// porque são removidos do payload antes do merge. Atómico no Postgres,
-// elimina a race condition entre edições do utilizador e o sync OneDrive.
+// ── API: guardar estado (shallow JSONB merge — atómico) ──────────────────────
 app.post('/api/state', async (req, res) => {
   try {
     const { data } = req.body;
     if (!data) return res.status(400).json({ error: 'data required' });
-
-    // Remove campos geridos pelo servidor (sync OneDrive os mantém)
-    const browserData = { ...data };
-    delete browserData.inputs;
-    delete browserData.excelSync;
 
     const result = await pool.query(`
       INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW())
@@ -69,7 +60,7 @@ app.post('/api/state', async (req, res) => {
         SET data = COALESCE(app_state.data, '{}'::jsonb) || $1::jsonb,
             updated_at = NOW()
       RETURNING updated_at
-    `, [JSON.stringify(browserData)]);
+    `, [JSON.stringify(data)]);
 
     res.json({ ok: true, updated_at: result.rows[0].updated_at });
   } catch (e) {
@@ -426,5 +417,6 @@ function startExcelSyncScheduler() {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`The Code Dashboard → http://localhost:${PORT}`);
-  startExcelSyncScheduler();
+  // Sync OneDrive automático desactivado — import é manual via UI.
+  // startExcelSyncScheduler();
 });

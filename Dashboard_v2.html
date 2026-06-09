@@ -736,13 +736,21 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       <div class="kpi"><div class="lbl">Walk-in</div><div class="val" id="inp-kpi-walkin"></div><div class="sub">Visitas espontâneas</div></div>
       <div class="kpi"><div class="lbl">Walk-in Sale</div><div class="val" id="inp-kpi-walkinSale"></div><div class="sub">Walk-ins convertidas</div></div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:9px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);gap:10px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span id="excel-sync-status" style="font-size:11px;color:var(--grey)">A verificar sincronização do OneDrive…</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <button id="btn-sync-excel" onclick="manualSyncExcel()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🔄 Sincronizar OneDrive</button>
-      </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--grey);font-weight:600;margin-right:6px">📥 Importar report mensal:</span>
+      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
+        Cidade Universitária
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Cidade Universitária','Henrique')">
+      </label>
+      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
+        Saldanha
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Saldanha','Íris')">
+      </label>
+      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
+        Nova
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Nova','Diogo')">
+      </label>
+      <span id="import-club-status" style="font-size:11px;color:var(--grey);margin-left:auto"></span>
     </div>
 
     <!-- Evolução diária — gráfico de linhas com toggles -->
@@ -1050,15 +1058,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <button onclick="saveAPIConfig()" style="padding:7px 18px;border:1.5px solid var(--orange);border-radius:var(--radius-sm);font-size:12px;background:var(--orange);color:white;cursor:pointer;font-family:inherit;font-weight:600">Guardar configuração</button>
     <button onclick="manualSyncClosum()" id="btn-sync-closum-cfg" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:500;color:var(--dark)">🔄 Sincronizar agora</button>
     <span id="sync-last" style="font-size:11px"></span>
-  </div>
-
-  <h2 class="section" style="margin-top:32px">OneDrive — Sincronização de Inputs Diários</h2>
-  <div class="info-box" style="margin-bottom:14px;line-height:1.7">
-    Os <strong>Inputs Diários</strong> são sincronizados automaticamente dos reports comerciais em OneDrive (Saldanha, Nova, Cidade Universitária) a cada <strong>30 minutos</strong>. O Excel é a fonte da verdade — alterações manuais na dashboard estão desactivadas.
-  </div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button onclick="manualSyncExcel()" id="btn-sync-excel-cfg" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:500;color:var(--dark)">🔄 Sincronizar OneDrive agora</button>
-    <span id="excel-sync-status-cfg" style="font-size:11px;color:var(--grey)">A verificar sincronização…</span>
   </div>
 
   <h2 class="section" style="margin-top:32px">Google Calendar — Integração de Tarefas</h2>
@@ -5521,7 +5520,150 @@ function updateSyncBadge() {
   updateLeadsSyncStatus(s);
 }
 
-// ── Excel/OneDrive sync (Inputs Diários) ──────────────────────────────────
+// ── Import manual de reports comerciais (Excel por clube) ─────────────────
+const REPORT_FIELD_MAP = {
+  'Efetuadas': 'chamadasEf',
+  'Atendidas': 'chamadasAt',
+  'Vis.Marc.': 'marc',
+  'Vis.Real.': 'visitas',
+  'Vendas':    'conv',
+  'Marc.Dia':  'marcDia',
+  'LEADS':     'leadsRec',
+  'WI':        'walkin',
+  'POS':       'pos',
+  'REFS':      'contAng',
+  'OUT':       'outbound',
+};
+const REPORT_MONTHS_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function _reportNormalizeDate(v, year) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  }
+  if (typeof v === 'number') {
+    const d = XLSX.SSF.parse_date_code(v);
+    if (!d) return null;
+    return d.y+'-'+String(d.m).padStart(2,'0')+'-'+String(d.d).padStart(2,'0');
+  }
+  if (typeof v === 'string') {
+    const s = v.trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+    m = s.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (m) return year+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  }
+  return null;
+}
+function _reportParseSheet(sheet, year) {
+  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  let headerRow = -1;
+  for (let i = 0; i < Math.min(20, grid.length); i++) {
+    const row = (grid[i]||[]).map(c => c==null?'':String(c).trim());
+    if (row.includes('DATA') && row.includes('Efetuadas')) { headerRow = i; break; }
+  }
+  if (headerRow < 0) return [];
+  const headers = (grid[headerRow]||[]).map(c => c==null?'':String(c).trim());
+  const colMap = {};
+  headers.forEach((h,i)=>{ if (h) colMap[h]=i; });
+  const dataCol = colMap['DATA'];
+  if (dataCol === undefined) return [];
+
+  const inputs = [];
+  for (let i = headerRow+1; i < grid.length; i++) {
+    const row = grid[i] || [];
+    const dateStr = _reportNormalizeDate(row[dataCol], year);
+    if (!dateStr) continue;
+    const obj = { data: dateStr };
+    for (const [excelH, schemaKey] of Object.entries(REPORT_FIELD_MAP)) {
+      const col = colMap[excelH];
+      if (col === undefined) continue;
+      const val = row[col];
+      if (val === null || val === undefined || val === '' || val === '-' || val === '—') continue;
+      const num = Number(val);
+      if (!isNaN(num)) obj[schemaKey] = num;
+    }
+    inputs.push(obj);
+  }
+
+  // Inscrições: contar Source="WI" por Data Ins. → walkinSale
+  const dataInsCol = colMap['Data Ins.'];
+  const sourceCol  = colMap['Source'];
+  const wiByDate = {};
+  if (dataInsCol !== undefined && sourceCol !== undefined) {
+    for (let i = headerRow+1; i < grid.length; i++) {
+      const row = grid[i] || [];
+      const ds  = _reportNormalizeDate(row[dataInsCol], year);
+      const src = String(row[sourceCol]||'').trim().toUpperCase();
+      if (!ds || src !== 'WI') continue;
+      wiByDate[ds] = (wiByDate[ds]||0) + 1;
+    }
+  }
+  inputs.forEach(r => {
+    r.walkinSale = wiByDate[r.data] || 0;
+    if (r.outbound === undefined) r.outbound = 0;
+  });
+  return inputs;
+}
+const REPORT_CUTOFF = '2026-06-09';
+function importClubReport(inputEl, unidade, comercial) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('import-club-status');
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--orange)">⏳ A processar '+escapeHtml(unidade)+'…</span>';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array', cellDates:true });
+      // Encontrar separador do mês corrente (Jan, Fev, ..., Dez), tolerando acentos
+      const now = new Date();
+      const year = now.getFullYear();
+      const monthName = REPORT_MONTHS_PT[now.getMonth()];
+      const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+      const target = norm(monthName);
+      const sheetName = wb.SheetNames.find(n => norm(n) === target);
+      if (!sheetName) {
+        showBanner('Separador "'+monthName+'" não encontrado no Excel de '+unidade, 'error');
+        if (statusEl) statusEl.innerHTML = '';
+        inputEl.value = '';
+        return;
+      }
+      const sheet = wb.Sheets[sheetName];
+      const rows = _reportParseSheet(sheet, year)
+        .filter(r => r.data >= REPORT_CUTOFF)
+        .map(r => ({ ...r, unidade, comercial }));
+
+      // Substitui no state.inputs: remove existentes desta unidade+mês, adiciona novas
+      const yyyymm = year+'-'+String(now.getMonth()+1).padStart(2,'0');
+      const kept = (state.inputs||[]).filter(r => {
+        if (r.unidade !== unidade) return true;
+        const d = String(r.data||'').slice(0,10);
+        return !d.startsWith(yyyymm);
+      });
+      state.inputs = [...kept, ...rows];
+      saveState();
+      showBanner('✓ '+unidade+': '+rows.length+' linha'+(rows.length!==1?'s':'')+' importadas ('+monthName+' '+year+')', 'success');
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green)">✓ '+escapeHtml(unidade)+': '+rows.length+' linhas</span>';
+      // Re-render
+      renderInputsKpis();
+      renderInputsGrouped('t-inputs');
+    } catch (e) {
+      console.error('[import] '+unidade+':', e);
+      showBanner('Erro a importar '+unidade+': '+e.message, 'error');
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--red)">⚠ erro</span>';
+    } finally {
+      inputEl.value = '';
+    }
+  };
+  reader.onerror = () => {
+    showBanner('Erro a ler ficheiro de '+unidade, 'error');
+    inputEl.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Excel/OneDrive sync (Inputs Diários) — DESACTIVADO, mantido por compat ─
 async function fetchExcelSyncStatus() {
   try {
     const res = await fetch('/api/excel-sync');
