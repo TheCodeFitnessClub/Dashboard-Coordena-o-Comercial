@@ -6468,8 +6468,25 @@ updateTabCounts();
 document.getElementById("save-status").textContent="Pronto";
 
 // ── Sync com servidor ao arrancar (Railway) ─────────────────
+// One-shot: limpa todos os inputs com data >= 2026-06-01.
+// Marca-se um flag em state para correr apenas UMA vez (persistente no DB).
+function _runOneShotCleanupInputs() {
+  const FLAG = 'cleanupInputs_2026-06-01_v1';
+  if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
+  const before = (state.inputs||[]).length;
+  state.inputs = (state.inputs||[]).filter(r => !r.data || String(r.data).slice(0,10) < '2026-06-01');
+  if (!state.__cleanupDone) state.__cleanupDone = {};
+  state.__cleanupDone[FLAG] = true;
+  const removed = before - state.inputs.length;
+  if (removed > 0) {
+    console.log('[cleanup] Removidas', removed, 'linhas de inputs >= 2026-06-01');
+    saveState();
+  }
+}
+
 if (SERVER_SYNC) {
   pullStateFromServer().then(changed => {
+    _runOneShotCleanupInputs();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   });
   // Polling a cada 30 segundos — mantém todos os utilizadores sincronizados
