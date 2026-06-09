@@ -2805,8 +2805,8 @@ function renderInputsGrouped(containerId) {
   const pagedGroupOrder = groupOrder.slice(pageStart, pageEnd);
 
   // Key summary fields to show in compact row (all numeric fields)
-  const sumKeys = ["leadsRec","contAng","pos","chamadasEf","chamadasAt","marc","marcDia","visitas","conv","walkin","walkinSale"];
-  const sumLabels = { leadsRec:"Leads", contAng:"REF", pos:"POS", chamadasEf:"Cham. ef.", chamadasAt:"Cham. at.", marc:"Marc.", marcDia:"Marc. dia", visitas:"Visitas", conv:"Conv.", walkin:"Walk-in", walkinSale:"WI sale" };
+  const sumKeys = ["leadsRec","contAng","pos","chamadasEf","chamadasAt","marc","marcDia","visitas","conv","walkin","walkinSale","outbound"];
+  const sumLabels = { leadsRec:"Leads", contAng:"REF", pos:"POS", chamadasEf:"Cham. ef.", chamadasAt:"Cham. at.", marc:"Marc.", marcDia:"Marc. dia", visitas:"Visitas", conv:"Conv.", walkin:"Walk-in", walkinSale:"WI sale", outbound:"OUT" };
 
   let html = '<div class="tbl-wrap"><div class="tbl-search">';
   html += '<input data-search-for="'+containerId+'" placeholder="Filtrar..." value="'+escapeHtml(search)+'" oninput="_tblSearch[\''+containerId+'\']=this.value;_inputsPage=1;renderInputsGrouped(\''+containerId+'\')">';
@@ -5575,15 +5575,22 @@ function _reportParseSheet(sheet, year) {
     const row = grid[i] || [];
     const dateStr = _reportNormalizeDate(row[dataCol], year);
     if (!dateStr) continue;
+    // Dia não trabalhado: se TODAS as colunas de Chamadas&Visitas+Funil de Leads
+    // estiverem com "-"/"—" (ou vazias), saltamos esta linha.
+    let hasAnyValue = false;
+    let hasAnyDash  = false;
     const obj = { data: dateStr };
     for (const [excelH, schemaKey] of Object.entries(REPORT_FIELD_MAP)) {
       const col = colMap[excelH];
       if (col === undefined) continue;
       const val = row[col];
-      if (val === null || val === undefined || val === '' || val === '-' || val === '—') continue;
+      if (val === '-' || val === '—') { hasAnyDash = true; continue; }
+      if (val === null || val === undefined || val === '') continue;
       const num = Number(val);
-      if (!isNaN(num)) obj[schemaKey] = num;
+      if (!isNaN(num)) { obj[schemaKey] = num; hasAnyValue = true; }
     }
+    // Se a linha só tem traços (dia não trabalhado), descartamos.
+    if (!hasAnyValue && hasAnyDash) continue;
     inputs.push(obj);
   }
 
@@ -5606,7 +5613,7 @@ function _reportParseSheet(sheet, year) {
   });
   return inputs;
 }
-const REPORT_CUTOFF = '2026-06-09';
+const REPORT_CUTOFF = '2026-06-01';
 function importClubReport(inputEl, unidade, comercial) {
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
