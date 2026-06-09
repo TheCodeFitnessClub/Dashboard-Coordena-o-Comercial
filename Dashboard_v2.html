@@ -269,6 +269,39 @@ table.tbl td.cell-warn{background:var(--yellow-l)!important;color:var(--yellow);
 .btn-icon:hover{background:var(--red-l);color:var(--red)}
 .btn-icon.dup:hover{background:var(--orange-l);color:var(--orange)}
 .empty{padding:40px;text-align:center;color:var(--grey);font-size:13px;background:var(--card-bg);border:2px dashed var(--line);border-radius:var(--radius);font-weight:500}
+/* Inputs Diários — sincronizado do OneDrive, totalmente read-only.
+   Os campos aparecem como texto plano (sem caixas, sem setas de select, sem ícone de calendário). */
+#t-inputs table.tbl td input,
+#t-inputs table.tbl td select,
+#t-inputs table.tbl td textarea{
+  pointer-events:none!important;
+  background:transparent!important;
+  border:none!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  outline:none!important;
+  padding:8px 12px!important;
+  margin:0!important;
+  width:100%!important;
+  -webkit-appearance:none!important;
+  -moz-appearance:none!important;
+  appearance:none!important;
+  color:inherit!important;
+  font-family:inherit;
+  font-size:13px;
+}
+/* Esconde o ícone de calendário dos inputs de data */
+#t-inputs table.tbl td input[type="date"]::-webkit-calendar-picker-indicator,
+#t-inputs table.tbl td input[type="datetime-local"]::-webkit-calendar-picker-indicator{display:none!important}
+/* Esconde a seta dos selects */
+#t-inputs table.tbl td select{background-image:none!important;padding-right:12px!important}
+/* Esconde a coluna de ações (apagar/duplicar) */
+#t-inputs table.tbl td.act,
+#t-inputs table.tbl th.act{visibility:hidden;width:0;padding:0;border:none}
+/* Linhas com hover mais subtil — feedback visual de "consultável" */
+#t-inputs table.tbl tbody tr:hover td{background:rgba(255,255,255,.02)}
+/* Esconde o botão de adicionar coluna custom */
+#t-inputs .btn-add-col{display:none!important}
 .tbl-search{padding:10px 14px;background:var(--card-bg);border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-radius:var(--radius) var(--radius) 0 0}
 .tbl-search input{flex:1;min-width:140px;border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;font-family:inherit;background:var(--bg);transition:border-color .15s}
 .tbl-search input:focus{outline:none;border-color:var(--orange)}
@@ -703,10 +736,26 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       <div class="kpi"><div class="lbl">Walk-in</div><div class="val" id="inp-kpi-walkin"></div><div class="sub">Visitas espontâneas</div></div>
       <div class="kpi"><div class="lbl">Walk-in Sale</div><div class="val" id="inp-kpi-walkinSale"></div><div class="sub">Walk-ins convertidas</div></div>
     </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:9px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="excel-sync-status" style="font-size:11px;color:var(--grey)">A verificar sincronização do OneDrive…</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button id="btn-sync-excel" onclick="manualSyncExcel()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🔄 Sincronizar OneDrive</button>
+      </div>
+    </div>
+
+    <!-- Evolução diária — gráfico de linhas com toggles -->
+    <div style="background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:18px;box-shadow:var(--card-shadow)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--dark)">📈 Evolução diária no período</div>
+        <div id="inputs-daily-toggles" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div class="chart-wrap" style="height:280px;padding:0;background:transparent;border:none;box-shadow:none"><canvas id="chart-inputs-daily"></canvas></div>
+    </div>
+
     <h2 class="section">Inputs Diários
-      <span class="actions">
-        <button onclick="addRow('inputs')" class="primary">+ Adicionar linha</button>
-      </span>
+      <span style="font-size:11px;color:var(--grey);font-weight:500;margin-left:8px">sincronizado automaticamente do OneDrive — leitura apenas</span>
     </h2>
     <div id="t-inputs"></div>
   </div>
@@ -1003,6 +1052,15 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <span id="sync-last" style="font-size:11px"></span>
   </div>
 
+  <h2 class="section" style="margin-top:32px">OneDrive — Sincronização de Inputs Diários</h2>
+  <div class="info-box" style="margin-bottom:14px;line-height:1.7">
+    Os <strong>Inputs Diários</strong> são sincronizados automaticamente dos reports comerciais em OneDrive (Saldanha, Nova, Cidade Universitária) a cada <strong>30 minutos</strong>. O Excel é a fonte da verdade — alterações manuais na dashboard estão desactivadas.
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button onclick="manualSyncExcel()" id="btn-sync-excel-cfg" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:500;color:var(--dark)">🔄 Sincronizar OneDrive agora</button>
+    <span id="excel-sync-status-cfg" style="font-size:11px;color:var(--grey)">A verificar sincronização…</span>
+  </div>
+
   <h2 class="section" style="margin-top:32px">Google Calendar — Integração de Tarefas</h2>
   <div class="info-box" style="margin-bottom:14px;line-height:1.7">
     Quando ativo, ao preencheres o <strong>prazo</strong> de uma tarefa abre automaticamente um tab do Google Calendar com o evento pré-preenchido — basta clicar <em>Guardar</em> uma vez.<br>
@@ -1093,6 +1151,19 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
   </div>
 </div>
 
+<!-- Modal: Plano de ação (KPIs Mensais) -->
+<div class="modal-bg" id="kpim-plano-modal-bg">
+  <div class="modal" id="kpim-plano-modal" style="max-width:640px">
+    <h3 id="kpim-plano-modal-title" style="margin-bottom:6px"></h3>
+    <div id="kpim-plano-modal-sub" style="font-size:12px;color:var(--grey);margin-bottom:14px"></div>
+    <textarea id="kpim-plano-modal-ta" rows="10" placeholder="Descreve o plano de ação para este mês..." style="width:100%;border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:12px;font-family:inherit;font-size:13px;background:var(--bg);color:var(--dark);resize:vertical;min-height:200px;outline:none"></textarea>
+    <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button onclick="closeKpimPlanoModal()" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">Fechar</button>
+      <button onclick="saveKpimPlanoModal()" class="primary" style="padding:7px 18px;border:none;border-radius:var(--radius-sm);font-size:12px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-weight:700">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════
      JAVASCRIPT
 ══════════════════════════════════════════════════════════ -->
@@ -1166,6 +1237,7 @@ const SCHEMA = {
     { key:"conv",       label:"Conversões",  type:"number",   w:100 },
     { key:"walkin",     label:"Walk-in",     type:"number",   w:80 },
     { key:"walkinSale", label:"WI sale",     type:"number",   w:80 },
+    { key:"outbound",   label:"Outbound",    type:"number",   w:90 },
     { key:"notas",      label:"Notas",       type:"textarea", w:200 },
   ]},
   leads: { label:"Leads Closum", pageSize:10, sortBy:"dataEntrada", sortDir:"desc", fields:[
@@ -2592,6 +2664,102 @@ function renderInputsKpis() {
   set("inp-kpi-conv",       a.conv);
   set("inp-kpi-walkin",     a.walkin);
   set("inp-kpi-walkinSale", a.walkinSale);
+  // Render gráfico de evolução diária
+  renderInputsDailyChart();
+}
+
+// ── Inputs Diários: gráfico de evolução diária com toggles ─────────────
+const INPUTS_DAILY_METRICS = [
+  { key:'leadsRec',   label:'Leads',          color:'#F97316', def:true  },
+  { key:'chamadasEf', label:'Cham. ef.',      color:'#22C55E', def:true  },
+  { key:'chamadasAt', label:'Cham. at.',      color:'#10B981', def:false },
+  { key:'marc',       label:'Marcações',      color:'#A855F7', def:false },
+  { key:'visitas',    label:'Visitas',        color:'#60A5FA', def:false },
+  { key:'conv',       label:'Conversões',     color:'#FBBF24', def:true  },
+  { key:'pos',        label:'POS',            color:'#94A3B8', def:false },
+  { key:'walkin',     label:'Walk-in',        color:'#F87171', def:false },
+];
+let _inputsDailyVisible = null; // Set<string> de métricas ativas
+function _getInputsDailyVisible() {
+  if (_inputsDailyVisible) return _inputsDailyVisible;
+  _inputsDailyVisible = new Set(INPUTS_DAILY_METRICS.filter(m=>m.def).map(m=>m.key));
+  return _inputsDailyVisible;
+}
+function toggleInputsDailyMetric(key) {
+  const vis = _getInputsDailyVisible();
+  if (vis.has(key)) vis.delete(key); else vis.add(key);
+  renderInputsDailyChart();
+}
+function renderInputsDailyChart() {
+  const canvas = document.getElementById('chart-inputs-daily');
+  const togglesEl = document.getElementById('inputs-daily-toggles');
+  if (!canvas || !togglesEl) return;
+  const vis = _getInputsDailyVisible();
+
+  // Render toggles
+  togglesEl.innerHTML = INPUTS_DAILY_METRICS.map(m => {
+    const active = vis.has(m.key);
+    const bg = active ? m.color : 'transparent';
+    const fg = active ? '#0A0A0A' : 'var(--grey)';
+    const border = active ? m.color : 'var(--line)';
+    return '<button onclick="toggleInputsDailyMetric(\''+m.key+'\')" '
+         + 'style="padding:4px 10px;border:1.5px solid '+border+';border-radius:20px;font-size:10.5px;background:'+bg+';color:'+fg+';cursor:pointer;font-family:inherit;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:5px">'
+         + '<span style="width:7px;height:7px;background:'+m.color+';border-radius:50%;display:inline-block"></span>'
+         + escapeHtml(m.label)+'</button>';
+  }).join('');
+
+  // Filtrar inputs pelo filtro global (período + clube + comercial)
+  const rows = applyGlobalFilter(state.inputs || [], 'unidade', 'comercial', false);
+  // Agrupar por data → soma de cada métrica
+  const byDate = {};
+  rows.forEach(r => {
+    const d = String(r.data || '').slice(0,10);
+    if (!d) return;
+    if (!byDate[d]) byDate[d] = {};
+    INPUTS_DAILY_METRICS.forEach(m => {
+      byDate[d][m.key] = (byDate[d][m.key] || 0) + (Number(r[m.key]) || 0);
+    });
+  });
+  const dates = Object.keys(byDate).sort();
+  // Formato dos labels: DD/MM
+  const labels = dates.map(d => {
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3]+'/'+m[2] : d;
+  });
+
+  const datasets = INPUTS_DAILY_METRICS
+    .filter(m => vis.has(m.key))
+    .map(m => ({
+      label: m.label,
+      data: dates.map(d => byDate[d][m.key] || 0),
+      borderColor: m.color,
+      backgroundColor: m.color + '22',
+      tension: .3,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      borderWidth: 2,
+      spanGaps: true,
+      fill: false,
+    }));
+
+  if (charts.inputsDaily) charts.inputsDaily.destroy();
+  charts.inputsDaily = new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { font: { size: 10 } } },
+      },
+    },
+  });
 }
 
 function renderInputsGrouped(containerId) {
@@ -2748,6 +2916,8 @@ function removeCustomCol(schemaKey, key) {
 
 // ── CRUD ───────────────────────────────────────────────────
 function updateCell(schemaKey, idx, key, value) {
+  // Inputs Diários é sincronizado do OneDrive — bloquear edições manuais.
+  if (schemaKey === "inputs") return;
   if (!state[schemaKey][idx]) return;
   const f = SCHEMA[schemaKey].fields.find(x=>x.key===key);
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
@@ -2799,6 +2969,8 @@ function updateCell(schemaKey, idx, key, value) {
   if (schemaKey==="equipa")  populateFilters();
 }
 function addRow(schemaKey) {
+  // Inputs Diários é sincronizado do OneDrive — bloquear criação manual.
+  if (schemaKey === "inputs") { showBanner('Inputs Diários é sincronizado do OneDrive — edição manual desactivada.', 'warning'); return; }
   const r = {};
   if (schemaKey==="tarefas")                                                        { r.estado="A fazer"; r.prioridade="Média"; r.criadoEm=new Date().toISOString().slice(0,10); }
   if (["inputs","reunioesD","reunioesC","reunioesDir"].includes(schemaKey))         r.data=new Date().toISOString().slice(0,10);
@@ -4428,7 +4600,7 @@ function initSubTabs() {
 }
 function renderSubPanel(group, subtab) {
   if (group==="kpis") {
-    if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
+    if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); updateExcelSyncStatus(); }
     if (subtab==="comerciais") renderComerciais();
     if (subtab==="kpisM")      renderKpisMensais();
   }
@@ -4500,7 +4672,7 @@ function renderActivePanel() {
   if (tab==="ficheiros")  renderFicheiros();
   if (tab==="socios")     renderSociosPanel();
   if (tab==="objetivos")  renderObjetivos();
-  if (tab==="config")     { renderTable("t-equipa","equipa"); renderTable("t-metas","metas"); const gt=document.getElementById("gcal-toggle"); if(gt) gt.checked=!!state.gcalEnabled; _applyThemeBtns(localStorage.getItem(THEME_KEY)||'dark'); }
+  if (tab==="config")     { renderTable("t-equipa","equipa"); renderTable("t-metas","metas"); const gt=document.getElementById("gcal-toggle"); if(gt) gt.checked=!!state.gcalEnabled; _applyThemeBtns(localStorage.getItem(THEME_KEY)||'dark'); updateExcelSyncStatus(); }
   updateTabCounts();
 }
 function updateTabCounts() {
@@ -5348,6 +5520,78 @@ function updateSyncBadge() {
   // Also update leads panel status
   updateLeadsSyncStatus(s);
 }
+
+// ── Excel/OneDrive sync (Inputs Diários) ──────────────────────────────────
+async function fetchExcelSyncStatus() {
+  try {
+    const res = await fetch('/api/excel-sync');
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+function _fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const pad = n => String(n).padStart(2,'0');
+  return pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function _agoMin(iso) {
+  if (!iso) return null;
+  const d = new Date(iso); if (isNaN(d.getTime())) return null;
+  return Math.max(0, Math.round((Date.now()-d.getTime())/60000));
+}
+async function updateExcelSyncStatus() {
+  const els = [document.getElementById('excel-sync-status'), document.getElementById('excel-sync-status-cfg')].filter(Boolean);
+  if (!els.length) return;
+  const s = await fetchExcelSyncStatus();
+  let html;
+  if (s.error) {
+    html = '<span style="color:var(--red)">⚠ Erro ao ler status: '+escapeHtml(s.error)+'</span>';
+  } else if (s.inProgress) {
+    html = '<span style="color:var(--orange)">⏳ Sincronização em curso…</span>';
+  } else if (!s.status) {
+    html = '<span style="color:var(--yellow)">⏳ Ainda não sincronizado · cutoff '+escapeHtml(s.cutoff||'')+'</span>';
+  } else {
+    const st = s.status;
+    const ago = _agoMin(st.finishedAt || st.lastRun);
+    const agoTxt = ago===null?'':' · há '+ago+' min';
+    const perClub = (st.perClub||[]).map(c => escapeHtml(c.unidade)+': '+c.count).join(' · ');
+    const errCount = (st.errors||[]).length;
+    const errTxt = errCount ? ' <span style="color:var(--red)">· '+errCount+' erro'+(errCount>1?'s':'')+'</span>' : '';
+    html = '<span style="color:var(--green)">✓ Última sync: '+escapeHtml(_fmtTime(st.finishedAt||st.lastRun))+agoTxt+'</span>'
+         + ' <span style="color:var(--grey)">· '+escapeHtml(String(st.total||0))+' linhas ('+perClub+')</span>'
+         + errTxt;
+  }
+  els.forEach(el => el.innerHTML = html);
+}
+async function manualSyncExcel() {
+  const btns = [document.getElementById('btn-sync-excel'), document.getElementById('btn-sync-excel-cfg')].filter(Boolean);
+  btns.forEach(b => { b.disabled = true; b._origText = b.textContent; b.textContent = '⏳ A sincronizar…'; });
+  try {
+    const res = await fetch('/api/excel-sync', { method:'POST' });
+    const j = await res.json();
+    if (!res.ok || !j.ok) throw new Error(j.error || 'sync failed');
+    const errs = (j.summary && j.summary.errors) || [];
+    if (errs.length) {
+      showBanner('Sync OneDrive com erros: '+errs.map(e=>e.unidade+' — '+e.error).join('; '), 'warning');
+    } else {
+      showBanner('✓ Sincronização do OneDrive concluída ('+(j.summary && j.summary.total||0)+' linhas).', 'success');
+    }
+    // Refresh local state from DB (the sync wrote new inputs there)
+    if (typeof pullStateFromServer === 'function') await pullStateFromServer();
+    await updateExcelSyncStatus();
+    if (document.getElementById('panel-kpis').classList.contains('active')) renderActiveKpisSubPanel();
+    if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+  } catch (e) {
+    showBanner('Erro a sincronizar OneDrive: '+e.message, 'error');
+  } finally {
+    btns.forEach(b => { b.disabled = false; b.textContent = b._origText || '🔄 Sincronizar OneDrive'; });
+  }
+}
+
 function updateLeadsSyncStatus(s) {
   const el = document.getElementById('leads-sync-status');
   if (!el) return;
@@ -5787,14 +6031,12 @@ async function doSyncClosum(silent = false) {
 // ── KPIs Mensais auto-calculados ────────────────────────────
 
 const KPIS_DEF = [
-  { key:"contAng",         label:"Contactos angariados (REF)",          fmt:"n", metaKey:"metaContAng",         inv:false },
   { key:"pos",             label:"POS",                                  fmt:"n", metaKey:"metaPos",             inv:false },
   { key:"pctChamAt",       label:"% Chamadas atendidas",                 fmt:"%", metaKey:"metaPctChamAt",       inv:false },
   { key:"pctMarcCham",     label:"% Marcações (marc. / cham. atendidas)",fmt:"%", metaKey:"metaPctMarcCham",     inv:false },
   { key:"pctVisitMarcDia", label:"% Visitas (visitas / marc. do dia)",   fmt:"%", metaKey:"metaPctVisitMarcDia", inv:false },
   { key:"pctWiSale",       label:"% Walk-in sale",                       fmt:"%", metaKey:"metaPctWiSale",       inv:false },
   { key:"pctConv",         label:"% Conversão (vendas / visitas)",       fmt:"%", metaKey:"metaPctConv",         inv:false },
-  { key:"objetivo",        label:"Objetivo do mês",                      fmt:"n", metaKey:"metaObjetivo",        inv:false },
   { key:"pctObjetivo",     label:"% Objetivo atingido",                  fmt:"%", metaKey:"metaPctObjetivo",     inv:false },
   { key:"tempoMedioResp",  label:"Tempo médio resposta (min)",           fmt:"n", metaKey:"metaTempoResp",       inv:true  },
   { key:"slaOkPct",        label:"% SLA cumprido (≤ 60 min)",           fmt:"%", metaKey:"metaSlaOk",           inv:false },
@@ -5946,6 +6188,48 @@ function onKpiPlanoInput(taEl) {
   saveState();
 }
 
+// ── Modal: Plano de ação (KPIs Mensais) ──────────────────────────────
+let _kpimPlanoCtx = null; // { mes, unidade }
+function openKpimPlanoModal(mes, unidade) {
+  _kpimPlanoCtx = { mes, unidade };
+  const row = (state.kpisM||[]).find(r => r.mes===mes && r.unidade===unidade) || {};
+  const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const [y,m] = mes.split('-');
+  const mesLbl = (MONTHS_PT[Number(m)-1]||mes)+' '+y;
+  document.getElementById('kpim-plano-modal-title').textContent = '📋 Plano de ação — '+unidade;
+  document.getElementById('kpim-plano-modal-sub').textContent = mesLbl;
+  document.getElementById('kpim-plano-modal-ta').value = row.planoAcao || '';
+  document.getElementById('kpim-plano-modal-bg').classList.add('show');
+  setTimeout(()=>document.getElementById('kpim-plano-modal-ta').focus(), 50);
+}
+function closeKpimPlanoModal() {
+  document.getElementById('kpim-plano-modal-bg').classList.remove('show');
+  _kpimPlanoCtx = null;
+}
+function saveKpimPlanoModal() {
+  if (!_kpimPlanoCtx) return closeKpimPlanoModal();
+  const { mes, unidade } = _kpimPlanoCtx;
+  const val = document.getElementById('kpim-plano-modal-ta').value;
+  let row = (state.kpisM||[]).find(r => r.mes===mes && r.unidade===unidade);
+  if (!row) {
+    row = { mes, unidade };
+    if (!state.kpisM) state.kpisM = [];
+    state.kpisM.push(row);
+  }
+  row.planoAcao = val;
+  saveState();
+  closeKpimPlanoModal();
+  // Refresh visual (preview do plano no botão)
+  if (document.getElementById('panel-kpis').classList.contains('active')) {
+    const btn = document.querySelector("#panel-kpis .sub-tabs button.active");
+    if (btn && btn.dataset.subtab === 'kpisM') renderKpisMensais();
+  }
+}
+// Fechar ao clicar no fundo do modal
+document.getElementById('kpim-plano-modal-bg').addEventListener('click', e => {
+  if (e.target.id === 'kpim-plano-modal-bg') closeKpimPlanoModal();
+});
+
 function renderKpisMensais() {
   const cont = document.getElementById("kpim-panel"); if (!cont) return;
   const now = new Date();
@@ -5975,6 +6259,8 @@ function renderKpisMensais() {
       const metaLocal = metaRow[kpi.metaKey];
       const meta      = (metaLocal!==null && metaLocal!==undefined && metaLocal!=="") ? metaLocal : getGlobalMetaStd(kpi.metaKey);
       const hasMeta   = meta!==null && meta!==undefined && meta!=="";
+      // Esconde linhas sem meta estabelecida (nem local nem global).
+      if (!hasMeta) return;
       const metaVal   = hasMeta ? meta : "";
 
       let realStr;
@@ -5998,10 +6284,17 @@ function renderKpisMensais() {
     html += '</tbody></table></div>';
 
     const plano = metaRow.planoAcao || "";
-    html += '<div class="kpim-plano"><div class="kpim-plano-lbl">📋 Plano de ação</div>';
-    html += '<textarea class="kpim-plano-ta" rows="3" placeholder="Descreve o plano de ação para este mês em '+escapeHtml(unidade)+'..."';
-    html += ' data-mes="'+escapeHtml(mes)+'" data-unidade="'+escapeHtml(unidade)+'" oninput="onKpiPlanoInput(this)">';
-    html += escapeHtml(plano)+'</textarea></div>';
+    const planoDefinido = plano.trim().length > 0;
+    const previewTxt = planoDefinido
+      ? (plano.length > 80 ? plano.slice(0,80).replace(/\n/g,' ')+'…' : plano.replace(/\n/g,' '))
+      : 'Sem plano definido';
+    html += '<div class="kpim-plano" style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--line);margin-top:8px">';
+    html += '<button onclick="openKpimPlanoModal(\''+escapeHtml(mes)+'\',\''+escapeHtml(unidade)+'\')" title="Abrir plano de ação" style="display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--card-bg);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:var(--dark);transition:all .15s;flex-shrink:0">';
+    html += '<span style="font-size:14px">📋</span> Plano de ação';
+    if (planoDefinido) html += '<span style="display:inline-block;width:7px;height:7px;background:var(--green);border-radius:50%;margin-left:2px" title="Plano definido"></span>';
+    html += '</button>';
+    html += '<span style="font-size:12px;color:var(--grey);font-style:'+(planoDefinido?'normal':'italic')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escapeHtml(previewTxt)+'</span>';
+    html += '</div>';
 
     html += '</div>';
   });
@@ -6048,6 +6341,13 @@ setInterval(() => {
 }, 60 * 1000);
 // Sincronizar ao abrir (silencioso) + arrancar intervalo
 setTimeout(() => { doSyncClosum(true); startAutoSync(); }, 800);
+// Refresh do banner OneDrive Sync (cada 60s enquanto a aba Inputs estiver visível)
+setInterval(() => {
+  if (document.getElementById('panel-kpis')?.classList.contains('active')) {
+    const btn = document.querySelector("#panel-kpis .sub-tabs button.active");
+    if (btn && btn.dataset.subtab === 'inputs') updateExcelSyncStatus();
+  }
+}, 60 * 1000);
 // Actualizar status das leads quando a aba CRM - Closum é activada
 document.querySelectorAll("#tabs button[data-tab='closum']").forEach(btn => {
   btn.addEventListener("click", () => updateLeadsSyncStatus());
