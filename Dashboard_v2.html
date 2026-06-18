@@ -1436,6 +1436,7 @@ let state = {
   kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   ficheiros:[],
+  deletedLeadIds:[],
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
 let _filtersBackup = null; // saved {unit, com} before entering compare mode, restored on exit
@@ -3042,6 +3043,15 @@ function openGcalTask(task) {
 }
 function deleteRow(schemaKey, idx) {
   if (!confirm("Eliminar esta linha?")) return;
+  // Se for uma lead do Closum, registar o leadId como "apagado" (tombstone)
+  // para que o sync automático NÃO a volte a recriar.
+  if (schemaKey === "leads") {
+    const lead = state.leads[idx];
+    if (lead && lead.leadId) {
+      state.deletedLeadIds = state.deletedLeadIds || [];
+      if (!state.deletedLeadIds.includes(lead.leadId)) state.deletedLeadIds.push(lead.leadId);
+    }
+  }
   state[schemaKey].splice(idx,1);
   saveState(); renderAllForKey(schemaKey);
 }
@@ -5942,6 +5952,16 @@ async function doSyncClosum(silent = false) {
       if (page > 200) break; // safety cap
     }
 
+    // Ignorar leads que o utilizador apagou manualmente (tombstones).
+    // Sem isto, o sync voltaria a recriar a lead a partir do Closum.
+    const _deletedSet = new Set(state.deletedLeadIds || []);
+    if (_deletedSet.size) {
+      const before = allApiLeads.length;
+      allApiLeads = allApiLeads.filter(l => !_deletedSet.has('CLO-' + l.id));
+      const skipped = before - allApiLeads.length;
+      if (skipped > 0) console.log('[Closum sync] Ignoradas', skipped, 'leads apagadas pelo utilizador');
+    }
+
     // Deduplicar state.leads por leadId — mantém apenas a MAIS RECENTE.
     // As duplicadas antigas são apagadas automaticamente.
     {
@@ -6183,6 +6203,20 @@ async function doSyncClosum(silent = false) {
           notas:                '',
         });
         novos++;
+      }
+    }
+
+    // Defesa final: remove qualquer lead em state.leads cujo leadId esteja na
+    // tombstone (pode acontecer se a deleteRow correu durante o sync).
+    {
+      const tombstones = new Set(state.deletedLeadIds || []);
+      if (tombstones.size > 0) {
+        const beforeFinal = state.leads.length;
+        state.leads = state.leads.filter(l => !l.leadId || !tombstones.has(l.leadId));
+        const removedFinal = beforeFinal - state.leads.length;
+        if (removedFinal > 0) {
+          console.log('[Closum sync] Defesa final: removidas', removedFinal, 'leads que estavam em tombstone');
+        }
       }
     }
 
