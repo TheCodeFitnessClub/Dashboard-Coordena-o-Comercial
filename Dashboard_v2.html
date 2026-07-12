@@ -4111,7 +4111,7 @@ function renderLeadsPanel() {
   // Leads por estado de sequência — lista fixa e ordem fixa.
   // NÃO obedece ao período: mostra a totalidade das leads (apenas respeita
   // clube/comercial). Cards aparecem sempre (mesmo com 0).
-  const SEQ_FIXED_LABELS = ['Negócio Ganho','Negócio Perdido','Primeiro Contacto','Follow up','Visita Marcada','Visita Efetuada','Proposta Apresentada'];
+  const SEQ_FIXED_LABELS = ['Negócio Ganho','Negócio Perdido','Primeiro Contacto','Follow up','Visita Marcada','Visita Efetuada','Proposta Apresentada','Sem sequência'];
   function _classifySeq(s) {
     const v = String(s||'').toLowerCase();
     if (/ganho|won|ades/.test(v))               return 'Negócio Ganho';
@@ -4121,7 +4121,7 @@ function renderLeadsPanel() {
     if (/visita|marcou|agendou/.test(v))        return 'Visita Marcada';
     if (/follow|segundo|2º/.test(v))            return 'Follow up';
     if (/primeiro|1º|first/.test(v))            return 'Primeiro Contacto';
-    return null;
+    return 'Sem sequência';
   }
   // Base: TODAS as leads (sem filtro de período), só clube+comercial.
   let seqRows = state.leads || [];
