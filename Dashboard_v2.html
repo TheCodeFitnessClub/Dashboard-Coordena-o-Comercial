@@ -5895,7 +5895,9 @@ function extractSourceFromCustom(cfList) {
 }
 function getSeqTimestamp(seq) {
   if (!seq) return '';
-  const ts = seq.created_at || seq.updated_at || seq.date || seq.timestamp || seq.contacted_at || '';
+  // Preferimos updated_at (última alteração) sobre created_at (criação inicial)
+  // — corresponde ao que o Closum usa nos seus próprios filtros de "fechada em X".
+  const ts = seq.updated_at || seq.created_at || seq.date || seq.timestamp || seq.contacted_at || '';
   if (!ts) return '';
   // Normalizar espaço → T (formato Closum) e limitar a 16 chars "YYYY-MM-DDTHH:MM"
   return String(ts).replace(' ', 'T').slice(0,16);
@@ -6180,14 +6182,19 @@ async function doSyncClosum(silent = false) {
         if (ex.sequencia !== seqResultado) {
           ex.sequencia = seqResultado;
           changed = true;
-          // Quando passa para uma sequência fechada (ganho/perdido), guardar data de fecho
-          if (isClosedSeq(seqResultado)) {
-            ex.dataFecho = seqTs || getCurrentLocalDatetime();
+        }
+        // dataFecho segue sempre o estado ATUAL da sequência no Closum:
+        //  · Fechada → sobrepõe com seqTs (data da última alteração no Closum).
+        //  · Reaberta (deixou de estar fechada) → limpa o dataFecho existente.
+        if (isClosedSeq(seqResultado)) {
+          const novoDataFecho = seqTs || ex.dataFecho || ex.dataPrimeiroContacto || ex.dataEntrada || '';
+          if (novoDataFecho && ex.dataFecho !== novoDataFecho) {
+            ex.dataFecho = novoDataFecho;
+            changed = true;
           }
-        } else if (isClosedSeq(seqResultado) && !ex.dataFecho) {
-          // Lead já estava fechada mas ainda não tinha dataFecho — preencher retroactivamente
-          ex.dataFecho = seqTs || ex.dataPrimeiroContacto || ex.dataEntrada || '';
-          if (ex.dataFecho) changed = true;
+        } else if (ex.dataFecho) {
+          ex.dataFecho = '';
+          changed = true;
         }
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
         if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
