@@ -3146,22 +3146,20 @@ function aggregateLeadDigitalConv(previous) {
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
 
-  // Denominador: regra unificada (fechadas por dataFecho + abertas por dataEntrada)
-  const totalRows = baseRows.filter(r => {
-    if (isClosedSeq(r.sequencia)) return r.dataFecho && inPeriod(r.dataFecho);
-    return r.dataEntrada && inPeriod(r.dataEntrada);
-  });
+  // Denominador: Lead Digital criadas no período (por data de ENTRADA) — igual ao Closum
+  const totalRows = baseRows.filter(r => r.dataEntrada && inPeriod(r.dataEntrada));
   const total = totalRows.length;
 
-  // Numerador: ganhas com dataFecho no período
+  // Numerador: ganhas criadas no período (por data de ENTRADA)
   const ganhos = baseRows.filter(r =>
-    isWonSeq(r.sequencia) && r.dataFecho && inPeriod(r.dataFecho)
+    isWonSeq(r.sequencia) && r.dataEntrada && inPeriod(r.dataEntrada)
   ).length;
 
   return { total, ganhos };
 }
 
-// Devolve leads fechadas (ganho/perdido) filtradas por dataFecho no período seleccionado
+// Devolve leads fechadas (ganho/perdido). O período é filtrado pela data de
+// ENTRADA (criação da lead) — igual ao Closum — e NÃO pela data de fecho.
 // Aplica os mesmos filtros de unidade/comercial que aggregateLeads
 function aggregateLeadsClosed(previous) {
   let rows = state.leads;
@@ -3173,11 +3171,11 @@ function aggregateLeadsClosed(previous) {
     rows = rows.filter(r => membros.includes(r.comercial));
   }
   if (comF) rows = rows.filter(r => r.comercial === comF);
-  // Só leads fechadas, e usar dataFecho para o filtro de período
-  rows = rows.filter(r => isClosedSeq(r.sequencia || r.resultado) && r.dataFecho);
+  // Só leads fechadas; período pela data de ENTRADA (criação)
+  rows = rows.filter(r => isClosedSeq(r.sequencia || r.resultado));
   const p = filters.period;
   if (p && p !== 'comparar') {
-    rows = rows.filter(r => matchPeriod(String(r.dataFecho).slice(0,10), p, !!previous));
+    rows = rows.filter(r => r.dataEntrada && matchPeriod(String(r.dataEntrada).slice(0,10), p, !!previous));
   }
   return { rows, total: rows.length };
 }
@@ -3779,24 +3777,14 @@ function aggregateSources(previous) {
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
 
-  // Regra: cada lead é contabilizada UMA SÓ VEZ:
-  //   • Se fechada → no período de dataFecho
-  //   • Se aberta  → no período de dataEntrada
-  // "Em curso" = aberta (não fechada) com dataEntrada no período.
-  // "Ganhos/Perdidos" = fechada com dataFecho no período.
-  // "Qty" = ganhos + perdidos + emCurso (todas as leads contabilizadas no período).
-  const fechadas = baseRows.filter(r =>
-    isClosedSeq(r.sequencia) && r.dataFecho && inPeriod(r.dataFecho)
-  );
-  const abertasNoPeriodo = baseRows.filter(r =>
-    !isClosedSeq(r.sequencia) && r.dataEntrada && inPeriod(r.dataEntrada)
-  );
+  // Cada lead é atribuída ao período pela data de ENTRADA (criação) — igual ao
+  // Closum. O bucket (ganho/perdido/em curso) depende do estado ATUAL da
+  // sequência. "Qty" = ganhos + perdidos + emCurso.
+  const noPeriodo = baseRows.filter(r => r.dataEntrada && inPeriod(r.dataEntrada));
 
   // Reunir sources: baseline fixa + outras dinâmicas que apareçam nos dados
   const sourceSet = new Set(SOURCE_BASELINE);
-  fechadas.forEach(r => sourceSet.add(normalizeSource(r.source)));
-  abertasNoPeriodo.forEach(r => sourceSet.add(normalizeSource(r.source)));
-  // Ordem: baseline na ordem definida, depois as extras alfabeticamente
+  noPeriodo.forEach(r => sourceSet.add(normalizeSource(r.source)));
   const baselineSet = new Set(SOURCE_BASELINE);
   const extras = [...sourceSet].filter(s => !baselineSet.has(s)).sort();
   const sources = [...SOURCE_BASELINE, ...extras];
@@ -3804,18 +3792,12 @@ function aggregateSources(previous) {
   const stats = {};
   sources.forEach(s => stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 });
 
-  // Ganhos / Perdidos pela dataFecho
-  fechadas.forEach(r => {
+  noPeriodo.forEach(r => {
     const s = normalizeSource(r.source);
     if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
-    if (isWonSeq(r.sequencia))  { stats[s].ganhos++;   stats[s].qty++; }
-    if (isLostSeq(r.sequencia)) { stats[s].perdidos++; stats[s].qty++; }
-  });
-  // Em curso pela dataEntrada (só leads que ainda não fecharam)
-  abertasNoPeriodo.forEach(r => {
-    const s = normalizeSource(r.source);
-    if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
-    stats[s].emCurso++;
+    if (isWonSeq(r.sequencia))       stats[s].ganhos++;
+    else if (isLostSeq(r.sequencia)) stats[s].perdidos++;
+    else                             stats[s].emCurso++;
     stats[s].qty++;
   });
 
@@ -3920,24 +3902,28 @@ const MOTIVO_OPTIONS = [
   'Timing - voltará mais tarde',
   'Já é sócio noutra unidade TheCode',
   'Outro',
+  'Sem motivo',
 ];
 const MOTIVO_CUTOFF = '2026-06-01';
-const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8'];
+const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8','#475569'];
 
 function aggregateMotivosPerdidos(previous, sourceFilter) {
-  // Filtra por dataFecho (data em que a lead foi marcada como perdida no Closum)
+  // Só leads PERDIDAS (aggregateLeadsClosed já filtra período pela data de entrada).
+  // Leads perdidas sem motivo preenchido vão para o bucket "Sem motivo".
   const l = aggregateLeadsClosed(previous);
   const counts = {};
   MOTIVO_OPTIONS.forEach(m => counts[m] = 0);
   let total = 0;
   const sourcesPresentes = new Set();
   l.rows.forEach(r => {
+    if (!isLostSeq(r.sequencia || r.resultado)) return; // só perdidas (exclui ganhas)
     const ns = normalizeSource(r.source);
     if (ns) sourcesPresentes.add(ns);
     if (sourceFilter && ns !== sourceFilter) return;
     const mot = (r.motivoPerdido || '').trim();
-    if (!mot) return;
-    if (counts.hasOwnProperty(mot)) {
+    if (!mot) {
+      counts['Sem motivo']++;
+    } else if (counts.hasOwnProperty(mot)) {
       counts[mot]++;
     } else {
       counts['Outro']++;
