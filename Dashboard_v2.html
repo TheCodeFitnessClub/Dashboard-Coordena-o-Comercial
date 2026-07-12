@@ -4109,7 +4109,8 @@ function renderLeadsPanel() {
   }
 
   // Leads por estado de sequência — lista fixa e ordem fixa.
-  // Cada lead é classificada num dos 7 buckets; cards aparecem sempre (mesmo com 0).
+  // NÃO obedece ao período: mostra a totalidade das leads (apenas respeita
+  // clube/comercial). Cards aparecem sempre (mesmo com 0).
   const SEQ_FIXED_LABELS = ['Negócio Ganho','Negócio Perdido','Primeiro Contacto','Follow up','Visita Marcada','Visita Efetuada','Proposta Apresentada'];
   function _classifySeq(s) {
     const v = String(s||'').toLowerCase();
@@ -4122,8 +4123,18 @@ function renderLeadsPanel() {
     if (/primeiro|1º|first/.test(v))            return 'Primeiro Contacto';
     return null;
   }
+  // Base: TODAS as leads (sem filtro de período), só clube+comercial.
+  let seqRows = state.leads || [];
+  if (filters.unit) {
+    const membrosSeq = (state.equipa||[])
+      .filter(e => e.unidade===filters.unit && e.estado!=="Inativo")
+      .map(e => e.comercial).filter(Boolean);
+    seqRows = seqRows.filter(r => membrosSeq.includes(r.comercial));
+  }
+  if (filters.com) seqRows = seqRows.filter(r => r.comercial === filters.com);
+  const seqTotal = seqRows.length;
   const bySeq = Object.fromEntries(SEQ_FIXED_LABELS.map(k=>[k,0]));
-  l.rows.forEach(r=>{
+  seqRows.forEach(r=>{
     const k = _classifySeq(r.sequencia||r.resultado||'');
     if (k && bySeq[k]!==undefined) bySeq[k]++;
   });
@@ -4133,7 +4144,7 @@ function renderLeadsPanel() {
     seqEl.innerHTML=SEQ_FIXED_LABELS.map(s=>{
       const n=bySeq[s];
       const col=seqColor(s);
-      const pct=l.total?Math.round(n/l.total*100):0;
+      const pct=seqTotal?Math.round(n/seqTotal*100):0;
       return '<div class="kpi" style="border-left:3px solid '+col+'">'
         +'<div class="lbl">'+escapeHtml(s)+'</div>'
         +'<div class="val" style="color:'+col+'">'+n+'</div>'
