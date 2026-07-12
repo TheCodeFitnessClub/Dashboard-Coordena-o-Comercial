@@ -4823,6 +4823,9 @@ function mapClosumUnidade(str) {
 
 function seqColor(val) {
   if (!val || val === '—') return '#6B7B8D';
+  // Casos específicos usados nos cards da secção "Leads & Estado de Sequência"
+  if (val === 'Sem sequência')       return '#94A3B8';
+  if (val === 'Proposta Apresentada') return '#EAB308';
   const v = val.toLowerCase();
   if (v.includes('ganho') || v.includes('won') || v.includes('adesão') || v.includes('ades')) return '#22C55E';
   if (v.includes('perdido') || v.includes('lost') || v.includes('não interessado') || v.includes('sem resposta')) return '#F87171';
