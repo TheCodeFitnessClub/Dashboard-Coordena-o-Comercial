@@ -3146,17 +3146,20 @@ function aggregateLeadDigitalConv(previous) {
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
 
-  // Denominador: Lead Digital criadas no período (por data de ENTRADA) — igual ao Closum
-  const totalRows = baseRows.filter(r => r.dataEntrada && inPeriod(r.dataEntrada));
+  // Denominador: Lead Digital criadas no período (pela DATA REAL DE CRIAÇÃO) — igual ao Closum
+  const totalRows = baseRows.filter(r => dataCriacaoLead(r) && inPeriod(dataCriacaoLead(r)));
   const total = totalRows.length;
 
-  // Numerador: ganhas criadas no período (por data de ENTRADA)
+  // Numerador: ganhas criadas no período (pela data real de criação)
   const ganhos = baseRows.filter(r =>
-    isWonSeq(r.sequencia) && r.dataEntrada && inPeriod(r.dataEntrada)
+    isWonSeq(r.sequencia) && dataCriacaoLead(r) && inPeriod(dataCriacaoLead(r))
   ).length;
 
   return { total, ganhos };
 }
+// Data REAL de criação da lead no Closum (para contagens tipo Closum).
+// Fallback para dataEntrada nas leads ainda sem o campo (pré-sync).
+function dataCriacaoLead(r) { return r.dataCriacao || r.dataEntrada; }
 
 // Devolve leads fechadas (ganho/perdido). O período é filtrado pela data de
 // ENTRADA (criação da lead) — igual ao Closum — e NÃO pela data de fecho.
@@ -3171,11 +3174,11 @@ function aggregateLeadsClosed(previous) {
     rows = rows.filter(r => membros.includes(r.comercial));
   }
   if (comF) rows = rows.filter(r => r.comercial === comF);
-  // Só leads fechadas; período pela data de ENTRADA (criação)
+  // Só leads fechadas; período pela DATA REAL DE CRIAÇÃO (igual ao Closum)
   rows = rows.filter(r => isClosedSeq(r.sequencia || r.resultado));
   const p = filters.period;
   if (p && p !== 'comparar') {
-    rows = rows.filter(r => r.dataEntrada && matchPeriod(String(r.dataEntrada).slice(0,10), p, !!previous));
+    rows = rows.filter(r => dataCriacaoLead(r) && matchPeriod(String(dataCriacaoLead(r)).slice(0,10), p, !!previous));
   }
   return { rows, total: rows.length };
 }
@@ -3778,10 +3781,10 @@ function aggregateSources(previous) {
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
 
-  // Cada lead é atribuída ao período pela data de ENTRADA (criação) — igual ao
+  // Cada lead é atribuída ao período pela DATA REAL DE CRIAÇÃO — igual ao
   // Closum. O bucket (ganho/perdido/em curso) depende do estado ATUAL da
   // sequência. "Qty" = ganhos + perdidos + emCurso.
-  const noPeriodo = baseRows.filter(r => r.dataEntrada && inPeriod(r.dataEntrada));
+  const noPeriodo = baseRows.filter(r => dataCriacaoLead(r) && inPeriod(dataCriacaoLead(r)));
 
   // Reunir sources: baseline fixa + outras dinâmicas que apareçam nos dados
   const sourceSet = new Set(SOURCE_BASELINE);
@@ -6129,6 +6132,8 @@ async function doSyncClosum(silent = false) {
       const lid = 'CLO-' + al.id;
       // Preservar hora local — a API devolve "+01:00", slice(0,16) dá "2026-05-07T23:02"
       const dataEntrada = adjustEntradaHorario(String(al.creation_date).slice(0,16));
+      // Data REAL de criação (crua, sem ajuste) — usada só nas contagens tipo Closum.
+      const dataCriacao = String(al.creation_date).slice(0,16).replace(' ', 'T');
       const seqResultado = mapSeqToResultado(al.lead_sales_sequence);
       const seqTs        = getSeqTimestamp(al.lead_sales_sequence);
       const cfListMain = Array.isArray(al.custom_fields) ? al.custom_fields
@@ -6153,6 +6158,9 @@ async function doSyncClosum(silent = false) {
         let changed = false;
         // dataEntrada de leads existentes é IMUTÁVEL (pode ter sido curada
         // manualmente). O sync nunca a sobrepõe.
+        // dataCriacao (data real do Closum) pode ser preenchida/atualizada —
+        // só afeta as contagens, não o tempo de resposta.
+        if (ex.dataCriacao !== dataCriacao) { ex.dataCriacao = dataCriacao; changed = true; }
         // ════════════════════════════════════════════════════════════════════
         // dataPrimeiroContacto: NUNCA sobrescrever se já está preenchido.
         // Só preenchemos automaticamente se a data está VAZIA (string vazia,
@@ -6208,6 +6216,7 @@ async function doSyncClosum(silent = false) {
           // Lead nova: aplica default "Lead Digital" caso o sync não tenha trazido source
           source:               source || 'Lead Digital',
           dataEntrada,
+          dataCriacao,
           comercial:            closumUserToComercial(userMap[al.user_id]),
           dataPrimeiroContacto: dpcGuardado || dpcFromSeq,
           sequencia:            seqResultado,
