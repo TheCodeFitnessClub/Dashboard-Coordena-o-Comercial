@@ -1817,14 +1817,18 @@ function computeRealizado(r) {
   return op*0.75 + on*1 + pl*1.25;
 }
 function computeTempoResp(r) {
-  if (!r.dataEntrada || !r.dataPrimeiroContacto) return "";
-  const e = new Date(r.dataEntrada), p = new Date(r.dataPrimeiroContacto);
+  // Usa a data ajustada para dia útil (dataEntradaSLA) para o cálculo do tempo
+  // de resposta — uma lead que entra à noite/fim de semana só começa a contar
+  // o relógio no dia útil seguinte. Fallback para dataEntrada (leads antigas).
+  const base = r.dataEntradaSLA || r.dataEntrada;
+  if (!base || !r.dataPrimeiroContacto) return "";
+  const e = new Date(base), p = new Date(r.dataPrimeiroContacto);
   if (isNaN(e)||isNaN(p)) return "";
   const m = Math.round((p-e)/60000);
   return m < 0 ? "" : m;
 }
 function computeSLA(r) {
-  if (!r.dataEntrada) return "";
+  if (!(r.dataEntradaSLA || r.dataEntrada)) return "";
   const t = computeTempoResp(r);
   if (t === "" || t === null || t === undefined) return "Sem contacto";
   return t <= 60 ? "OK" : "VIOLADO";
@@ -4165,14 +4169,14 @@ function renderLeadWarningNovo() {
     if (!r.dataEntrada || String(r.dataEntrada).slice(0,10) <= SLA_CUTOFF) return false;
     const seq = (r.sequencia || r.resultado || "").toLowerCase();
     if (seq !== "novo" && seq !== "new") return false;
-    const entry = new Date(r.dataEntrada).getTime();
+    const entry = new Date(r.dataEntradaSLA || r.dataEntrada).getTime();
     return !isNaN(entry) && (now - entry) > MIN90_MS;
   });
 
   if (!stale.length) { el.innerHTML = ""; return; }
 
   const items = stale.map(r => {
-    const mins = Math.floor((now - new Date(r.dataEntrada).getTime()) / (60 * 1000));
+    const mins = Math.floor((now - new Date(r.dataEntradaSLA || r.dataEntrada).getTime()) / (60 * 1000));
     let elapsed;
     if (mins < 60) { elapsed = mins + ' min'; }
     else { const h = Math.floor(mins/60), m = mins%60; elapsed = h+'h'+(m?(' '+m+'min'):''); }
@@ -4204,14 +4208,14 @@ function renderLeadWarning() {
     if (!r.dataEntrada || String(r.dataEntrada).slice(0,10) <= SLA_CUTOFF) return false;
     const seq = (r.sequencia || r.resultado || "").toLowerCase();
     if (!seq.includes("primeiro") && !seq.includes("first")) return false;
-    const entry = new Date(r.dataEntrada).getTime();
+    const entry = new Date(r.dataEntradaSLA || r.dataEntrada).getTime();
     return !isNaN(entry) && (now - entry) > WEEK_MS;
   });
 
   if (!stale.length) { el.innerHTML = ""; return; }
 
   const items = stale.map(r => {
-    const days = Math.floor((now - new Date(r.dataEntrada).getTime()) / (24 * 60 * 60 * 1000));
+    const days = Math.floor((now - new Date(r.dataEntradaSLA || r.dataEntrada).getTime()) / (24 * 60 * 60 * 1000));
     return '<div class="lead-warning-item">'
       + '<b>' + escapeHtml(r.nome || "") + '</b>'
       + (r.comercial ? '<span style="color:var(--grey);font-size:11px">· ' + escapeHtml(r.comercial) + '</span>' : '')
@@ -6126,8 +6130,10 @@ async function doSyncClosum(silent = false) {
     let novos = 0, atualizadas = 0;
     for (const al of allApiLeads) {
       const lid = 'CLO-' + al.id;
-      // Preservar hora local — a API devolve "+01:00", slice(0,16) dá "2026-05-07T23:02"
-      const dataEntrada = adjustEntradaHorario(String(al.creation_date).slice(0,16));
+      // dataEntrada = data REAL de criação no Closum (usada para contagens/período).
+      // dataEntradaSLA = data ajustada para dia útil (usada só p/ tempo de resposta).
+      const dataEntrada    = String(al.creation_date).slice(0,16).replace(' ', 'T');
+      const dataEntradaSLA = adjustEntradaHorario(String(al.creation_date).slice(0,16));
       const seqResultado = mapSeqToResultado(al.lead_sales_sequence);
       const seqTs        = getSeqTimestamp(al.lead_sales_sequence);
       const cfListMain = Array.isArray(al.custom_fields) ? al.custom_fields
@@ -6150,6 +6156,10 @@ async function doSyncClosum(silent = false) {
       if (byId[lid]) {
         const ex = byId[lid];
         let changed = false;
+        // Sincronizar datas de entrada: real (contagens) + SLA (tempo de resposta).
+        // Isto corrige leads antigas cujo dataEntrada estava ajustado para dia útil.
+        if (ex.dataEntrada !== dataEntrada) { ex.dataEntrada = dataEntrada; changed = true; }
+        if (ex.dataEntradaSLA !== dataEntradaSLA) { ex.dataEntradaSLA = dataEntradaSLA; changed = true; }
         // ════════════════════════════════════════════════════════════════════
         // dataPrimeiroContacto: NUNCA sobrescrever se já está preenchido.
         // Só preenchemos automaticamente se a data está VAZIA (string vazia,
@@ -6205,6 +6215,7 @@ async function doSyncClosum(silent = false) {
           // Lead nova: aplica default "Lead Digital" caso o sync não tenha trazido source
           source:               source || 'Lead Digital',
           dataEntrada,
+          dataEntradaSLA,
           comercial:            closumUserToComercial(userMap[al.user_id]),
           dataPrimeiroContacto: dpcGuardado || dpcFromSeq,
           sequencia:            seqResultado,
@@ -6230,10 +6241,31 @@ async function doSyncClosum(silent = false) {
       }
     }
 
+    // Remover leads apagadas no Closum: a dashboard passa a espelhar o Closum.
+    // Só valida leads DENTRO da janela de sync (criadas >= startDate) — leads
+    // mais antigas não são descarregadas, por isso são sempre preservadas.
+    // Guarda de segurança: só corre se o sync trouxe leads (evita apagar tudo
+    // por causa de um erro de rede que devolveu 0 leads).
+    let removedApagadas = 0;
+    if (allApiLeads.length > 0) {
+      const closumIds = new Set(allApiLeads.map(l => 'CLO-' + l.id));
+      const beforeApag = state.leads.length;
+      state.leads = state.leads.filter(l => {
+        if (!l.leadId) return true; // leads manuais ficam sempre
+        const entradaMs = l.dataEntrada ? new Date(String(l.dataEntrada).replace(' ','T')).getTime() : 0;
+        if (!entradaMs || entradaMs < startTs) return true; // fora da janela → preservar
+        return closumIds.has(l.leadId); // dentro da janela: só fica se ainda existe no Closum
+      });
+      removedApagadas = beforeApag - state.leads.length;
+      if (removedApagadas > 0) {
+        console.log('[Closum sync] Removidas', removedApagadas, 'leads que já não existem no Closum (apagadas lá)');
+      }
+    }
+
     // Reset dismiss so warnings re-evaluate after every sync
     _leadWarningDismissed = false;
     _leadWarningNovoDismissed = false;
-    if (novos > 0 || atualizadas > 0) {
+    if (novos > 0 || atualizadas > 0 || removedApagadas > 0) {
       saveState();
       renderAllForKey('leads');
     } else {
