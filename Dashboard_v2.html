@@ -3184,7 +3184,7 @@ function aggregateLeadsClosed(previous) {
   return { rows, total: rows.length };
 }
 function aggregateLeads(previous) {
-  let rows=state.leads;
+  let baseRows=state.leads;
   // In compare mode, side A (previous=false) uses unitA/comA (kept in sync with filters.unit/com)
   //                 side B (previous=true)  uses unitB/comB
   const cmp   = previous && filters.compare && filters.compareParams ? filters.compareParams : null;
@@ -3192,12 +3192,19 @@ function aggregateLeads(previous) {
   const comF  = cmp ? (cmp.comB  || "") : filters.com;
   if (unitF) {
     const membros=(state.equipa||[]).filter(e=>e.unidade===unitF&&e.estado!=="Inativo").map(e=>e.comercial).filter(Boolean);
-    rows=rows.filter(r=>membros.includes(r.comercial));
+    baseRows=baseRows.filter(r=>membros.includes(r.comercial));
   }
-  if (comF)    rows=rows.filter(r=>r.comercial===comF);
+  if (comF)    baseRows=baseRows.filter(r=>r.comercial===comF);
   const p = filters.period;
+  // CONTAGEM de leads: período pela data REAL de entrada (dataEntrada) — igual ao Closum.
+  let rows = baseRows;
   if (p && p!=='comparar') rows=rows.filter(r=>r.dataEntrada&&matchPeriod(String(r.dataEntrada).slice(0,10),p,!!previous));
-  const rowsSLA = rows.filter(r => r.dataEntrada && String(r.dataEntrada).slice(0,10) > SLA_CUTOFF);
+  // TEMPO DE RESPOSTA / SLA: período e cutoff pela data AJUSTADA para dia útil
+  // (dataEntradaSLA) — mantém os tempos exatamente como estavam antes.
+  const _slaDate = r => r.dataEntradaSLA || r.dataEntrada;
+  let slaRows = baseRows;
+  if (p && p!=='comparar') slaRows=slaRows.filter(r=>_slaDate(r)&&matchPeriod(String(_slaDate(r)).slice(0,10),p,!!previous));
+  const rowsSLA = slaRows.filter(r => _slaDate(r) && String(_slaDate(r)).slice(0,10) > SLA_CUTOFF);
   const tempos=rowsSLA.map(r=>computeTempoResp(r)).filter(t=>t!==""&&t>0);
   const slaArr=rowsSLA.map(r=>computeSLA(r));
   return {
@@ -3215,8 +3222,10 @@ function tempoMedioContactoPorClube(u) {
                                     .map(e=>e.comercial).filter(Boolean);
   let rows = state.leads.filter(r=>membros.includes(r.comercial));
   const p = filters.period;
-  if (p && p!=='comparar') rows = rows.filter(r=>r.dataEntrada&&matchPeriod(String(r.dataEntrada).slice(0,10),p,false));
-  rows = rows.filter(r=>r.dataEntrada && String(r.dataEntrada).slice(0,10) > SLA_CUTOFF);
+  // Tempo de resposta: filtrar período/cutoff pela data ajustada para dia útil (dataEntradaSLA)
+  const _slaDate = r => r.dataEntradaSLA || r.dataEntrada;
+  if (p && p!=='comparar') rows = rows.filter(r=>_slaDate(r)&&matchPeriod(String(_slaDate(r)).slice(0,10),p,false));
+  rows = rows.filter(r=>_slaDate(r) && String(_slaDate(r)).slice(0,10) > SLA_CUTOFF);
   const tempos = rows.map(r=>computeTempoResp(r)).filter(t=>t!==""&&t>0);
   return tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : null;
 }
@@ -3373,13 +3382,15 @@ function renderTempoRespChart() {
 
   // Period filter — respects anchor date + SLA_CUTOFF
   function applyPeriodFilter(arr) {
+    // Tempo de resposta: usar a data ajustada para dia útil (dataEntradaSLA)
+    const _sd = l => l.dataEntradaSLA || l.dataEntrada;
     // Excluir leads anteriores ao corte SLA
-    arr = arr.filter(l => l.dataEntrada && String(l.dataEntrada).slice(0,10) > SLA_CUTOFF);
+    arr = arr.filter(l => _sd(l) && String(_sd(l)).slice(0,10) > SLA_CUTOFF);
     if (!p || p==='comparar' || p==='total') return arr;
     const {start, end} = getPeriodRange(p, false, anchorDate);
     return arr.filter(l=>{
-      if (!l.dataEntrada) return false;
-      const ds = String(l.dataEntrada);
+      if (!_sd(l)) return false;
+      const ds = String(_sd(l));
       let d;
       if (/^\d{2}\/\d{2}\/\d{4}$/.test(ds)) {
         const [dd,mm,yyyy]=ds.split('/'); d=new Date(Number(yyyy),Number(mm)-1,Number(dd));
@@ -3433,7 +3444,7 @@ function renderTempoRespChart() {
     const bmap={};
     filtered.forEach(l=>{
       const t=computeTempoResp(l); if (!t||t<=0) return;
-      const bk=getTimeBucket(l.dataEntrada,gran); if (!bk) return;
+      const bk=getTimeBucket(l.dataEntradaSLA || l.dataEntrada,gran); if (!bk) return;
       allKeysSet.add(bk);
       if (!bmap[bk]) bmap[bk]={sum:0,n:0};
       bmap[bk].sum+=t; bmap[bk].n++;
@@ -6359,9 +6370,11 @@ function computeKpiActuals(mes, unidade) {
   const membros = (state.equipa||[])
     .filter(e => e.unidade===unidade && (!e.estado||e.estado==="Ativo"))
     .map(e => e.comercial).filter(Boolean);
+  // Tempo de resposta / SLA: mês pela data ajustada para dia útil (dataEntradaSLA)
   const leadsDoMes = (state.leads||[]).filter(l => {
-    if (!l.dataEntrada) return false;
-    if (String(l.dataEntrada).slice(0,7) !== mes) return false;
+    const sd = l.dataEntradaSLA || l.dataEntrada;
+    if (!sd) return false;
+    if (String(sd).slice(0,7) !== mes) return false;
     return membros.length === 0 || membros.includes(l.comercial);
   });
   const tempos = leadsDoMes.map(l=>computeTempoResp(l)).filter(t=>t!==null&&t!==undefined&&t!==""&&t>0);
