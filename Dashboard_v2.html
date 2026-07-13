@@ -1070,6 +1070,11 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <button onclick="manualSyncClosum()" id="btn-sync-closum-cfg" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:500;color:var(--dark)">🔄 Sincronizar agora</button>
     <span id="sync-last" style="font-size:11px"></span>
   </div>
+  <div style="margin-top:14px;padding:12px 14px;background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius-sm)">
+    <div style="font-size:12px;color:var(--dark);font-weight:600;margin-bottom:4px">Sincronização completa</div>
+    <div style="font-size:11px;color:var(--grey);line-height:1.6;margin-bottom:10px">Reavalia a <strong>source de todas as leads</strong> a partir do Closum — usa isto quando alteraste sources no Closum (ex.: mudar uma lead para Outbound) e queres garantir que ficam refletidas. É mais lenta (mais chamadas à API). Não afeta os tempos de resposta nem outros dados.</div>
+    <button onclick="manualFullSyncClosum()" id="btn-full-sync-closum-cfg" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:500;color:var(--dark)">🔁 Sincronização completa (reavaliar sources)</button>
+  </div>
 
   <h2 class="section" style="margin-top:32px">Google Calendar — Integração de Tarefas</h2>
   <div class="info-box" style="margin-bottom:14px;line-height:1.7">
@@ -5843,6 +5848,20 @@ async function manualSyncClosum() {
     if (cfg) cfg.textContent = '🔄 Sincronizar agora';
   }
 }
+// Sincronização COMPLETA on-demand: re-verifica a source de TODAS as leads
+// (apanha alterações de source feitas no Closum). Mais lenta (mais chamadas à API).
+async function manualFullSyncClosum() {
+  const btn = document.getElementById('btn-full-sync-closum-cfg');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ A sincronizar tudo…'; }
+  try {
+    await doSyncClosum(false, true);   // forceAllSource = true
+    showBanner('✓ Sincronização completa concluída — sources reavaliadas.', 'success');
+  } catch (e) {
+    showBanner('Erro na sincronização completa: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔁 Sincronização completa (reavaliar sources)'; }
+  }
+}
 function mapSeqToResultado(seq) {
   if (!seq) return 'Novo';
   // Devolver o nome directamente do Closum (ex: "Primeiro Contacto", "Follow-up")
@@ -5920,7 +5939,7 @@ function closumUserToComercial(closumUserName) {
   return membro ? (membro.comercial || '') : '';
 }
 
-async function doSyncClosum(silent = false) {
+async function doSyncClosum(silent = false, forceAllSource = false) {
   if (_syncInProgress) {
     console.log('[Closum sync] Já existe um sync em curso, a ignorar este pedido');
     return;
@@ -6043,7 +6062,8 @@ async function doSyncClosum(silent = false) {
       //     que não tenham source no listing. Caso contrário, só para leads sem source guardada.
       const ex = byId[lid];
       const exHasSource = ex && ex.source && String(ex.source).trim() && ex.source !== 'Lead Digital';
-      if (!listingHasSource && (!sourceBackfillDone || !exHasSource)) {
+      // forceAllSource (sync completa manual) → re-verifica a source de TODAS as leads.
+      if (!listingHasSource && (forceAllSource || !sourceBackfillDone || !exHasSource)) {
         needsDetailSet.add(al.id);
         needsSource.add(al.id);
       }
