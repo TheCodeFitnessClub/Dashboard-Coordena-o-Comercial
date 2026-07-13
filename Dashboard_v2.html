@@ -6078,7 +6078,10 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     const detailMap   = {}; // id → motivoPerdido
     const sourceMap   = {}; // id → source
     let firstDetailLogged = false;
-    const maxFetch = sourceBackfillDone ? 80 : Math.min(needsDetail.length, 200);
+    // Sincronização completa (forceAllSource): busca TODAS as leads que precisam
+    // de detalhe (não limita a 80), para reavaliar a source de todas.
+    const maxFetch = forceAllSource ? needsDetail.length
+                   : (sourceBackfillDone ? 80 : Math.min(needsDetail.length, 200));
     const idsToFetch = needsDetail.slice(0, maxFetch);
     const BATCH_SIZE = 4;     // reduzido de 10 → 4 para evitar 502
     const BATCH_DELAY = 150;  // 150ms entre batches (gentil com o proxy)
