@@ -3944,14 +3944,22 @@ function aggregateMotivosPerdidos(previous, sourceFilter) {
   return { counts, total };
 }
 
-function _populateMotivosSourceFilter(sourcesSet) {
+function _populateMotivosSourceFilter(_ignored) {
   const sel = document.getElementById('motivos-source-filter');
   if (!sel) return;
   const current = sel.value;
-  const sources = [...sourcesSet].sort();
+  // Lista ESTÁVEL de sources — independente do período: baseline + todas as
+  // sources que existam em leads perdidas (qualquer período). Assim o dropdown
+  // não encolhe quando se filtra um período.
+  const set = new Set(SOURCE_BASELINE);
+  (state.leads || []).forEach(l => {
+    if (isLostSeq(l.sequencia || l.resultado)) set.add(normalizeSource(l.source));
+  });
+  const baselineSet = new Set(SOURCE_BASELINE);
+  const extras = [...set].filter(s => !baselineSet.has(s)).sort();
+  const sources = [...SOURCE_BASELINE, ...extras];
   const opts = ['<option value="">Total</option>']
     .concat(sources.map(s => '<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>'));
-  // Só re-renderiza se as opções mudaram (evita perder o foco)
   const newHtml = opts.join('');
   if (sel.innerHTML !== newHtml) {
     sel.innerHTML = newHtml;
