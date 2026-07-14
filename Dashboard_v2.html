@@ -805,7 +805,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       Conversão por Source
       <span title="Como se calcula (igual ao Closum):&#10;&#10;• Cada lead é atribuída ao período pela DATA REAL DE CRIAÇÃO no Closum. A data de fecho não é usada.&#10;&#10;• Cada lead conta UMA vez, no bucket do seu estado ATUAL:&#10;   – Ganho → Ganhos&#10;   – Perdido → Perdidos&#10;   – Qualquer outro (Novo, Follow-up, etc.) → Em curso&#10;&#10;• Qty = Ganhos + Perdidos + Em curso&#10;• As percentagens dos 3 sub-valores são calculadas sobre a Qty da source&#10;&#10;• O gráfico usa uma fórmula diferente:&#10;   % Negócio Ganho = ganhos ÷ (ganhos + perdidos) × 100&#10;   (só entre as leads fechadas — mede a qualidade da source)&#10;&#10;• O mês nunca muda: uma lead criada em junho fica sempre em junho, só muda de bucket conforme evolui.&#10;&#10;• Filtros aplicados: clube, comercial e período da aba horizontal.&#10;• Leads sem source preenchido contam como 'Lead Digital' por default." style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid var(--grey);color:var(--grey);border-radius:50%;font-size:10px;font-weight:700;cursor:help;font-family:inherit">i</span>
     </div>
-    <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px"></div>
+    <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px"></div>
     <div class="dash-section-label">Motivos de Negócio Perdido</div>
     <div id="motivos-perdido-display" class="grid c4" style="margin-bottom:18px"></div>
     <div class="grid c2" style="gap:18px">
@@ -3762,6 +3762,7 @@ const SOURCE_COLORS = ['#F97316','#A855F7','#22C55E','#60A5FA','#FBBF24','#F8717
 // "LEADS" do Closum é renomeado para "Contacto Direto Clube" via normalizeSource()
 const SOURCE_BASELINE = [
   'Lead Digital',
+  'Website',
   'Contacto Direto Clube',
   'Walk-in não convertido',
   'REFS',
@@ -3826,9 +3827,7 @@ function renderConvSourceDisplay() {
     const pctP = total > 0 ? Math.round((st.perdidos/total)*100) : 0;
     const pctE = total > 0 ? Math.round((st.emCurso/total)*100)  : 0;
     const color = SOURCE_COLORS[i % SOURCE_COLORS.length];
-    // 3 cards em cima (span 2 de 6) + 2 cards em baixo (span 3 de 6) — os de baixo ocupam o mesmo espaço total que os de cima.
-    const span = i < 3 ? 2 : 3;
-    return `<div class="kpi" style="border-left:3px solid ${color};grid-column:span ${span}">
+    return `<div class="kpi" style="border-left:3px solid ${color}">
       <div class="lbl">${escapeHtml(s)}</div>
       <div class="val">${total}</div>
       <div class="sub">
@@ -6205,7 +6204,12 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
       const sourceFromListing = extractSourceFromCustom(cfListMain);
       const sourceFromDetail  = sourceMap[al.id] || '';
       const sourceFound = sourceFromListing || sourceFromDetail; // pode ser ''
-      const source = sourceFound ? normalizeSource(sourceFound) : '';
+      // Tag "Website ..." (vem na listagem) → sub-tipo de Lead Digital.
+      // Só se aplica quando NÃO há source explícita.
+      const _tags = Array.isArray(al.contact_tag) ? al.contact_tag : [];
+      const _hasWebsiteTag = _tags.some(t => /website/i.test(String((t && t.tag && t.tag.tag) || '')));
+      let source = sourceFound ? normalizeSource(sourceFound) : '';
+      if (!source && _hasWebsiteTag) source = 'Website';
 
       const nomeKey = (al.name||'').trim().toLowerCase();
       if (byId[lid]) {
