@@ -4020,7 +4020,25 @@ function renderMotivosPerdidoChart() {
     options: { responsive: true, maintainAspectRatio: false,
       plugins: {
         title: { display: true, text: 'Motivos de Negócio Perdido' },
-        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+        legend: { position: 'right', labels: {
+          boxWidth: 12, font: { size: 10 },
+          // Legenda com número e percentagem de cada motivo (obedece ao período)
+          generateLabels: (chart) => {
+            const ds = chart.data.datasets[0] || { data: [], backgroundColor: [] };
+            return (chart.data.labels || []).map((lab, i) => {
+              const v = ds.data[i] || 0;
+              const pct = total ? Math.round((v/total)*100) : 0;
+              return {
+                text: `${lab}: ${v} (${pct}%)`,
+                fillStyle: ds.backgroundColor[i],
+                strokeStyle: ds.backgroundColor[i],
+                lineWidth: 0,
+                hidden: false,
+                index: i,
+              };
+            });
+          },
+        } },
         tooltip: {
           callbacks: {
             label: (ctx) => {
