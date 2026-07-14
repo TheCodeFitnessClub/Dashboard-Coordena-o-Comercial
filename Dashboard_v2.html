@@ -6727,6 +6727,23 @@ setInterval(() => {
 }, 60 * 1000);
 // Sincronizar ao abrir (silencioso) + arrancar intervalo
 setTimeout(() => { doSyncClosum(true); startAutoSync(); }, 800);
+// Sincronização COMPLETA automática — 1×/dia de madrugada (entre 3h e 6h).
+// Reavalia a source e o motivo de todas as leads. Requer o separador aberto
+// a essa hora. Usa localStorage para correr só uma vez por dia.
+function _maybeRunDailyFullSync() {
+  try {
+    const now = new Date();
+    const h = now.getHours();
+    if (h < 3 || h >= 6) return;                 // fora da janela da madrugada
+    const hoje = now.toISOString().slice(0,10);  // AAAA-MM-DD (local-ish)
+    if (localStorage.getItem('closum_full_sync_day') === hoje) return; // já correu hoje
+    localStorage.setItem('closum_full_sync_day', hoje);
+    console.log('[Closum] Sincronização completa automática (madrugada)…');
+    doSyncClosum(true, true);                     // silencioso + forceAllSource
+  } catch (_) {}
+}
+setInterval(_maybeRunDailyFullSync, 20 * 60 * 1000); // verifica a cada 20 min
+setTimeout(_maybeRunDailyFullSync, 5000);            // e uma vez pouco após abrir
 // Refresh do banner OneDrive Sync (cada 60s enquanto a aba Inputs estiver visível)
 setInterval(() => {
   if (document.getElementById('panel-kpis')?.classList.contains('active')) {
