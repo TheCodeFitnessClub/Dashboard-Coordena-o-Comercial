@@ -3917,21 +3917,27 @@ const MOTIVO_CUTOFF = '2026-06-01';
 const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8','#475569'];
 
 function aggregateMotivosPerdidos(previous, sourceFilter) {
-  // Só leads PERDIDAS (aggregateLeadsClosed já filtra período pela data de entrada).
-  // Leads perdidas sem motivo preenchido vão para o bucket "Sem motivo".
-  const l = aggregateLeadsClosed(previous);
+  // Espelha o filtro "Motivo de Negócio Perdido" do Closum: conta as leads pelo
+  // CAMPO motivo, independentemente da sequência atual (inclui leads reabertas
+  // ou ganhas que mantêm o motivo). "Sem motivo" = leads perdidas sem motivo.
+  // Respeita clube/comercial e o período (pela data real de criação).
+  const base = _leadsRespeitamFiltrosUnitCom(previous);
+  const p = filters.period;
+  const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
+  const rows = base.filter(r => dataCriacaoLead(r) && inPeriod(dataCriacaoLead(r)));
   const counts = {};
   MOTIVO_OPTIONS.forEach(m => counts[m] = 0);
   let total = 0;
   const sourcesPresentes = new Set();
-  l.rows.forEach(r => {
-    if (!isLostSeq(r.sequencia || r.resultado)) return; // só perdidas (exclui ganhas)
+  rows.forEach(r => {
+    const mot = (r.motivoPerdido || '').trim();
+    const lost = isLostSeq(r.sequencia || r.resultado);
+    if (!mot && !lost) return; // sem motivo e não perdida → não conta
     const ns = normalizeSource(r.source);
     if (ns) sourcesPresentes.add(ns);
     if (sourceFilter && ns !== sourceFilter) return;
-    const mot = (r.motivoPerdido || '').trim();
     if (!mot) {
-      counts['Sem motivo']++;
+      counts['Sem motivo']++;           // lead perdida sem motivo preenchido
     } else if (counts.hasOwnProperty(mot)) {
       counts[mot]++;
     } else {
