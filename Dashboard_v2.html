@@ -6190,10 +6190,28 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     const sourceMap   = {}; // id → source
     let firstDetailLogged = false;
     // Sincronização completa (forceAllSource): busca TODAS as leads que precisam
-    // de detalhe (não limita a 80), para reavaliar a source de todas.
+    // de detalhe, para reavaliar source/motivo de todas.
+    // Sync normal: janela ROTATIVA. As leads que continuam sem motivo no Closum
+    // nunca saem da fila, por isso sem rotação o sync ficaria eternamente preso
+    // no mesmo bloco inicial e nunca chegaria às restantes.
     const maxFetch = forceAllSource ? needsDetail.length
-                   : (sourceBackfillDone ? 80 : Math.min(needsDetail.length, 200));
-    const idsToFetch = needsDetail.slice(0, maxFetch);
+                   : (sourceBackfillDone ? 150 : Math.min(needsDetail.length, 200));
+    let idsToFetch;
+    if (forceAllSource) {
+      idsToFetch = needsDetail;
+    } else {
+      let off = 0;
+      try { off = parseInt(localStorage.getItem('closum_detail_offset') || '0', 10) || 0; } catch(_) {}
+      if (off >= needsDetail.length) off = 0;
+      idsToFetch = needsDetail.slice(off, off + maxFetch);
+      // Se o bloco final for curto, completar com o início da fila
+      if (idsToFetch.length < maxFetch && needsDetail.length > maxFetch) {
+        idsToFetch = idsToFetch.concat(needsDetail.slice(0, maxFetch - idsToFetch.length));
+      }
+      const nextOff = needsDetail.length ? (off + maxFetch) % needsDetail.length : 0;
+      try { localStorage.setItem('closum_detail_offset', String(nextOff)); } catch(_) {}
+      console.log('[Closum sync] Janela rotativa de detalhe:', off, '→', off + idsToFetch.length, 'de', needsDetail.length);
+    }
     const BATCH_SIZE = 4;     // reduzido de 10 → 4 para evitar 502
     const BATCH_DELAY = 150;  // 150ms entre batches (gentil com o proxy)
 
