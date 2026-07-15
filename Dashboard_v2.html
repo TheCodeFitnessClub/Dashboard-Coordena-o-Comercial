@@ -1166,6 +1166,18 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
   </div>
 </div>
 
+<!-- Modal: Leads perdidas sem motivo -->
+<div class="modal-bg" id="semmotivo-modal-bg">
+  <div class="modal" id="semmotivo-modal" style="max-width:680px">
+    <h3 id="semmotivo-modal-title" style="margin-bottom:4px"></h3>
+    <div style="font-size:11px;color:var(--grey);margin-bottom:14px">Deviam estar todas preenchidas. Agrupadas por comercial · respeita os filtros ativos (período, clube, comercial).</div>
+    <div id="semmotivo-modal-body" style="max-height:55vh;overflow:auto"></div>
+    <div class="actions" style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button onclick="closeSemMotivoModal()" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Plano de ação (KPIs Mensais) -->
 <div class="modal-bg" id="kpim-plano-modal-bg">
   <div class="modal" id="kpim-plano-modal" style="max-width:640px">
@@ -3980,6 +3992,16 @@ function renderMotivosPerdidoDisplay() {
   el.innerHTML = MOTIVO_OPTIONS.map((m, i) => {
     const c = counts[m] || 0;
     const pct = total > 0 ? Math.round((c/total)*100) : 0;
+    // O card "Sem motivo" é clicável: abre a lista de leads por preencher.
+    // Devia estar a 0 — serve para cobrar os comerciais.
+    if (m === 'Sem motivo') {
+      const alerta = c > 0;
+      return `<div class="kpi" style="border-left:3px solid ${alerta ? 'var(--red)' : MOTIVO_COLORS[i]};cursor:pointer" onclick="openSemMotivoModal()" title="Clica para ver as leads sem motivo preenchido">
+        <div class="lbl" style="font-size:10.5px">${m} ${alerta ? '⚠' : ''}</div>
+        <div class="val"${alerta ? ' style="color:var(--red)"' : ''}>${pct}%</div>
+        <div class="sub">${c} de ${total} · <span style="text-decoration:underline">ver leads</span></div>
+      </div>`;
+    }
     return `<div class="kpi" style="border-left:3px solid ${MOTIVO_COLORS[i]}">
       <div class="lbl" style="font-size:10.5px">${m}</div>
       <div class="val">${pct}%</div>
@@ -3987,6 +4009,58 @@ function renderMotivosPerdidoDisplay() {
     </div>`;
   }).join('');
 }
+
+// Leads perdidas SEM motivo preenchido (respeita clube/comercial e período)
+function _leadsSemMotivo(previous) {
+  const base = _leadsRespeitamFiltrosUnitCom(previous);
+  const p = filters.period;
+  const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
+  return base.filter(r => {
+    const dc = dataCriacaoLead(r);
+    if (!dc || !inPeriod(dc)) return false;
+    if (!isLostSeq(r.sequencia || r.resultado)) return false;
+    return !(r.motivoPerdido || '').trim();
+  });
+}
+
+function openSemMotivoModal() {
+  const rows = _leadsSemMotivo(false);
+  const el = document.getElementById('semmotivo-modal-body');
+  const t  = document.getElementById('semmotivo-modal-title');
+  if (!el || !t) return;
+  t.textContent = '⚠ Leads perdidas sem motivo — ' + rows.length;
+  if (!rows.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--green);font-weight:600">✓ Todas as leads perdidas têm motivo preenchido.</div>';
+  } else {
+    // Agrupar por comercial — mostra logo quem não está a cumprir
+    const byCom = {};
+    rows.forEach(r => { const c = r.comercial || '(sem comercial)'; (byCom[c] = byCom[c] || []).push(r); });
+    const ordered = Object.entries(byCom).sort((a,b) => b[1].length - a[1].length);
+    el.innerHTML = ordered.map(([com, ls]) => {
+      const items = ls
+        .sort((a,b) => String(dataCriacaoLead(b)||'').localeCompare(String(dataCriacaoLead(a)||'')))
+        .map(r => {
+          const d = String(dataCriacaoLead(r) || '').slice(0,10);
+          return '<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">'
+            + '<span style="color:var(--grey);min-width:80px">'+escapeHtml(d)+'</span>'
+            + '<span style="flex:1;color:var(--dark)">'+escapeHtml(r.nome || '(sem nome)')+'</span>'
+            + '<span style="color:var(--grey);font-size:11px">'+escapeHtml(normalizeSource(r.source))+'</span>'
+            + '</div>';
+        }).join('');
+      return '<div style="margin-bottom:18px">'
+        + '<div style="font-weight:700;font-size:13px;color:var(--orange);margin-bottom:6px">'+escapeHtml(com)+' — '+ls.length+' lead'+(ls.length!==1?'s':'')+'</div>'
+        + items + '</div>';
+    }).join('');
+  }
+  document.getElementById('semmotivo-modal-bg').classList.add('show');
+}
+function closeSemMotivoModal() {
+  document.getElementById('semmotivo-modal-bg').classList.remove('show');
+}
+// Fechar ao clicar no fundo do modal
+document.getElementById('semmotivo-modal-bg').addEventListener('click', e => {
+  if (e.target.id === 'semmotivo-modal-bg') closeSemMotivoModal();
+});
 
 function renderMotivosPerdidoChart() {
   const ctx = document.getElementById('chart-motivos-perdido');
