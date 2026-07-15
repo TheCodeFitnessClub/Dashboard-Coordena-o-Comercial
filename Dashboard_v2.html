@@ -6158,8 +6158,14 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
       // Source está num custom_field do Closum (mesma estrutura do motivo)
       const listingHasSource = !!extractSourceFromCustom(cfList);
 
-      // (a) Motivo de negócio perdido
-      if (isPerdido && !listingHasMotivo) {
+      // (a) Motivo de negócio perdido.
+      // A listagem NUNCA traz o motivo, por isso sem este filtro o sync ficava
+      // preso a re-verificar sempre as mesmas 80 leads e as restantes nunca
+      // eram lidas. Só buscamos as que ainda NÃO têm motivo guardado
+      // (a sync completa re-verifica todas).
+      const _exM = byId[lid];
+      const _jaTemMotivo = _exM && String(_exM.motivoPerdido || '').trim();
+      if (isPerdido && !listingHasMotivo && (forceAllSource || !_jaTemMotivo)) {
         needsDetailSet.add(al.id);
         needsMotivo.add(al.id);
       }
