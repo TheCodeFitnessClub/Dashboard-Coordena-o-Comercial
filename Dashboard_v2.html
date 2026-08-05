@@ -6144,6 +6144,11 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     const needsDetailSet = new Set();
     const needsMotivo = new Set();
     const needsSource = new Set();
+    // Notas (Histórico da Lead) → tempos precisos (passagem + 1.º contacto).
+    // SÓ para leads NOVAS ou leads note-based ainda sem 1.º contacto.
+    // NUNCA para leads antigas — preserva exatamente o passado.
+    const needsNotesNew = [];      // leads novas (prioridade — notas buscadas sempre)
+    const needsNotesPend = [];     // note-based à espera do 1.º contacto
 
     for (const al of allApiLeads) {
       const lid = 'CLO-' + al.id;
@@ -6177,6 +6182,12 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
       if (!listingHasSource && (forceAllSource || !sourceBackfillDone || !exHasSource)) {
         needsDetailSet.add(al.id);
         needsSource.add(al.id);
+      }
+      // (c) Notas para tempos precisos — só leads novas ou note-based sem 1.º contacto.
+      if (!ex) {
+        needsNotesNew.push(al.id);
+      } else if (ex._nb && !String(ex.dataPrimeiroContacto || '').trim()) {
+        needsNotesPend.push(al.id);
       }
     }
     const needsDetail = [...needsDetailSet];
@@ -6279,6 +6290,62 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     console.log('[Closum sync] Total motivos encontrados:', Object.keys(detailMap).length,
                 '· sources encontradas:', Object.keys(sourceMap).length);
 
+    // ── Notas (Histórico da Lead) → tempos precisos ──────────────────────────
+    // notesMap[id] = { passagem, primeiro } (timestamps "YYYY-MM-DDTHH:MM")
+    const notesMap = {};
+    // Extrai da lista de notas: 1ª (mais antiga) "alterou o proprietário" e
+    // 1ª (mais antiga) "Alterou o estado para ...".
+    function _parseLeadNotes(notes) {
+      let passagem = '', primeiro = '';
+      (notes || []).forEach(n => {
+        const msg = String(n.note_message || '');
+        const ts = String(n.creation_date || '').replace(' ', 'T').slice(0,16);
+        if (!ts) return;
+        if (/alterou o propriet[áa]rio da lead/i.test(msg)) {
+          if (!passagem || ts < passagem) passagem = ts;
+        } else if (/alterou o estado para/i.test(msg)) {
+          if (!primeiro || ts < primeiro) primeiro = ts;
+        }
+      });
+      return { passagem, primeiro };
+    }
+    async function fetchNotesWithRetry(id) {
+      const notesUrl = `https://api.closum.com/v2/lead/notes/${id}?api-key=${encodeURIComponent(s.closumKey)}`;
+      const nUrl = `${CLOSUM_PROXY}?url=${encodeURIComponent(notesUrl)}`;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const r = await fetch(nUrl);
+          if (r.ok) return await r.json();
+          if (r.status >= 500 && attempt === 0) { await new Promise(x=>setTimeout(x,400)); continue; }
+          return null;
+        } catch(e) { if (attempt === 0) { await new Promise(x=>setTimeout(x,400)); continue; } return null; }
+      }
+      return null;
+    }
+    // Fila: leads novas primeiro (notas sempre buscadas), depois pendentes (com rotação).
+    let notesToFetch = [...needsNotesNew];
+    if (needsNotesPend.length) {
+      const NOTES_CAP = 120;
+      let noff = 0;
+      try { noff = parseInt(localStorage.getItem('closum_notes_offset') || '0', 10) || 0; } catch(_) {}
+      if (noff >= needsNotesPend.length) noff = 0;
+      const room = Math.max(0, NOTES_CAP - notesToFetch.length);
+      notesToFetch = notesToFetch.concat(needsNotesPend.slice(noff, noff + room));
+      const nnext = needsNotesPend.length ? (noff + room) % needsNotesPend.length : 0;
+      try { localStorage.setItem('closum_notes_offset', String(nnext)); } catch(_) {}
+    }
+    if (notesToFetch.length) {
+      console.log('[Closum sync] A buscar notas de', notesToFetch.length, 'leads (novas:', needsNotesNew.length, ')');
+      for (let i = 0; i < notesToFetch.length; i += BATCH_SIZE) {
+        await Promise.all(notesToFetch.slice(i, i + BATCH_SIZE).map(async (id) => {
+          const nd = await fetchNotesWithRetry(id);
+          const notes = nd?.responseData?.notes || nd?.responseData || [];
+          if (Array.isArray(notes)) notesMap[id] = _parseLeadNotes(notes);
+        }));
+        if (i + BATCH_SIZE < notesToFetch.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
+      }
+    }
+
     let novos = 0, atualizadas = 0;
     for (const al of allApiLeads) {
       const lid = 'CLO-' + al.id;
@@ -6326,11 +6393,18 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
         // ════════════════════════════════════════════════════════════════════
         const dpcExistente = ex.dataPrimeiroContacto && String(ex.dataPrimeiroContacto).trim();
         if (!dpcExistente) {
-          const wasNovo     = !ex.sequencia || ex.sequencia === 'Novo';
-          const isContacted = seqResultado && seqResultado !== 'Novo';
-          if (wasNovo && isContacted) {
-            ex.dataPrimeiroContacto = seqTs || getCurrentLocalDatetime();
-            changed = true;
+          if (ex._nb) {
+            // Lead note-based: 1.º contacto = 1ª mudança de estado (Histórico da Lead).
+            const nd = notesMap[al.id];
+            if (nd && nd.primeiro) { ex.dataPrimeiroContacto = nd.primeiro; changed = true; }
+          } else {
+            // Leads antigas (pré-alteração): lógica original inalterada.
+            const wasNovo     = !ex.sequencia || ex.sequencia === 'Novo';
+            const isContacted = seqResultado && seqResultado !== 'Novo';
+            if (wasNovo && isContacted) {
+              ex.dataPrimeiroContacto = seqTs || getCurrentLocalDatetime();
+              changed = true;
+            }
           }
         }
         if (ex.sequencia !== seqResultado) {
@@ -6358,11 +6432,16 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
         if (source && ex.source !== source) { ex.source = source; changed = true; }
         if (changed) atualizadas++;
       } else {
-        // Lead nova — primeiro tentar recuperar dataPrimeiroContacto por leadId,
-        // depois por nome (compatibilidade após "apagar todas"). Se nada existe,
-        // só então usamos o timestamp da sequência do Closum.
+        // Lead NOVA → tempos precisos a partir do Histórico da Lead (notas):
+        //   • Entrada = passagem ao comercial (ajustada p/ dia útil).
+        //   • 1.º contacto = 1ª mudança de estado ("Alterou o estado para ...").
+        // Fallbacks (se as notas não vierem): criação / lógica antiga.
+        const nd = notesMap[al.id];
+        const entradaBase = (nd && nd.passagem) ? nd.passagem : String(al.creation_date).slice(0,16);
+        const dataEntradaNova = adjustEntradaHorario(entradaBase);
         const dpcGuardado = savedDPCById[lid] || savedDPC[nomeKey] || '';
-        const dpcFromSeq = (!dpcGuardado && seqResultado && seqResultado !== 'Novo' && seqTs) ? seqTs : '';
+        const dpcNota = (nd && nd.primeiro) ? nd.primeiro : '';
+        const dpcFromSeq = (!dpcGuardado && !dpcNota && seqResultado && seqResultado !== 'Novo' && seqTs) ? seqTs : '';
         // Se a lead já entra fechada (ganho/perdido), guardar dataFecho
         const dataFecho = isClosedSeq(seqResultado) ? (seqTs || getCurrentLocalDatetime()) : '';
         state.leads.push({
@@ -6372,14 +6451,15 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
           canal:                'Closum',
           // Lead nova: aplica default "Lead Digital" caso o sync não tenha trazido source
           source:               source || 'Lead Digital',
-          dataEntrada,
+          dataEntrada:          dataEntradaNova,
           dataCriacao,
           comercial:            closumUserToComercial(userMap[al.user_id]),
-          dataPrimeiroContacto: dpcGuardado || dpcFromSeq,
+          dataPrimeiroContacto: dpcGuardado || dpcNota || dpcFromSeq,
           sequencia:            seqResultado,
           dataFecho,
           motivoPerdido,
           notas:                '',
+          _nb:                  1,   // marcador: tempos baseados no Histórico da Lead
         });
         novos++;
       }
