@@ -5540,13 +5540,17 @@ function renderObjetivosCoord() {
     html += '<div style="margin-bottom:20px;background:var(--card-bg);border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden">';
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line)">';
     html += `<h3 style="margin:0;font-size:13px;color:var(--dark);font-weight:700;letter-spacing:.3px">${escapeHtml(fmtMes(m))} <span style="color:var(--grey);font-weight:400;font-size:11px">· ${escapeHtml(m)}</span></h3>`;
+    html += '<div style="display:flex;gap:6px">';
+    html += `<button onclick="addObjCoordRow('${escapeHtml(m)}')" style="background:none;border:1px solid var(--line);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--orange);cursor:pointer;font-weight:600">+ Objetivo</button>`;
     html += `<button onclick="deleteObjCoordMonth('${escapeHtml(m)}')" style="background:none;border:1px solid var(--line);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--red);cursor:pointer">Apagar mês</button>`;
+    html += '</div>';
     html += '</div>';
     html += '<table style="width:100%;border-collapse:collapse">';
     html += '<thead><tr style="background:rgba(255,255,255,.02)">'
          + '<th style="text-align:left;padding:8px 14px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Objetivo</th>'
          + '<th style="text-align:right;padding:8px 14px;width:120px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Valor (€)</th>'
          + '<th style="text-align:left;padding:8px 14px;width:160px;font-size:10.5px;font-weight:700;color:var(--grey);letter-spacing:.5px;text-transform:uppercase">Meta</th>'
+         + '<th style="width:36px"></th>'
          + '</tr></thead>';
     html += '<tbody>';
     rows.forEach(({ row, idx }) => {
@@ -5555,6 +5559,7 @@ function renderObjetivosCoord() {
            + `<td style="padding:8px 12px"><input type="text" value="${escapeHtml(row.objetivo||'')}" placeholder="Nome do objetivo" oninput="updateObjCoord(${idx},'objetivo',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle}"></td>`
            + `<td style="padding:8px 12px"><input type="number" value="${escapeHtml(String(row.valor??''))}" placeholder="0" oninput="updateObjCoord(${idx},'valor',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle};text-align:right"></td>`
            + `<td style="padding:8px 12px"><input type="text" value="${escapeHtml(row.meta||'')}" placeholder="≥ 25%" oninput="updateObjCoord(${idx},'meta',this.value)" onfocus="this.style.borderBottomColor='var(--accent)'" onblur="this.style.borderBottomColor='transparent'" style="${inpStyle}"></td>`
+           + `<td style="padding:8px 6px;text-align:center"><button onclick="deleteObjCoordRow(${idx})" title="Apagar este objetivo" style="background:none;border:none;color:var(--grey);cursor:pointer;font-size:14px;line-height:1">✕</button></td>`
            + '</tr>';
     });
     html += '</tbody></table>';
@@ -5579,9 +5584,26 @@ function addObjCoordMonth() {
     alert('Já existem objetivos para esse mês.');
     return;
   }
-  for (let i = 0; i < 3; i++) {
+  let n = parseInt(prompt('Quantos objetivos para este mês?', '3'), 10);
+  if (!Number.isFinite(n) || n < 1) n = 3;
+  if (n > 20) n = 20;
+  for (let i = 0; i < n; i++) {
     state.objetivosCoord.push({ mes, objetivo:'', valor:'', meta:'', notas:'' });
   }
+  saveState();
+  renderObjetivosCoord();
+}
+
+function addObjCoordRow(mes) {
+  if (!state.objetivosCoord) state.objetivosCoord = [];
+  state.objetivosCoord.push({ mes, objetivo:'', valor:'', meta:'', notas:'' });
+  saveState();
+  renderObjetivosCoord();
+}
+
+function deleteObjCoordRow(idx) {
+  if (!state.objetivosCoord || !state.objetivosCoord[idx]) return;
+  state.objetivosCoord.splice(idx, 1);
   saveState();
   renderObjetivosCoord();
 }
