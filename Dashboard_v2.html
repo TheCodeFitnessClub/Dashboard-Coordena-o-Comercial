@@ -5793,36 +5793,40 @@ function importClubReport(inputEl, unidade, comercial) {
   reader.onload = ev => {
     try {
       const wb = XLSX.read(new Uint8Array(ev.target.result), { type:'array', cellDates:true });
-      // Encontrar separador do mês corrente (Jan, Fev, ..., Dez), tolerando acentos
       const now = new Date();
       const year = now.getFullYear();
-      const monthName = REPORT_MONTHS_PT[now.getMonth()];
       const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
-      const target = norm(monthName);
-      const sheetName = wb.SheetNames.find(n => norm(n) === target);
-      if (!sheetName) {
-        showBanner('Separador "'+monthName+'" não encontrado no Excel de '+unidade, 'error');
+      const todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+      // Ler TODOS os separadores de mês (Jan..Dez) — assim preenche Junho, Julho,
+      // Agosto, etc. de uma vez e tapa qualquer buraco (ex.: dias em falta).
+      const monthSet = new Set(REPORT_MONTHS_PT.map(norm));
+      const monthSheets = wb.SheetNames.filter(n => monthSet.has(norm(n)));
+      if (!monthSheets.length) {
+        showBanner('Nenhum separador de mês encontrado no Excel de '+unidade, 'error');
         if (statusEl) statusEl.innerHTML = '';
         inputEl.value = '';
         return;
       }
-      const sheet = wb.Sheets[sheetName];
-      const todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-      const rows = _reportParseSheet(sheet, year)
-        .filter(r => r.data >= REPORT_CUTOFF && r.data <= todayStr)
-        .map(r => ({ ...r, unidade, comercial }));
+      let rows = [];
+      const mesesComDados = [];
+      monthSheets.forEach(sn => {
+        const parsed = _reportParseSheet(wb.Sheets[sn], year)
+          .filter(r => r.data >= REPORT_CUTOFF && r.data <= todayStr)
+          .map(r => ({ ...r, unidade, comercial }));
+        if (parsed.length) { rows = rows.concat(parsed); mesesComDados.push(sn); }
+      });
 
-      // Substitui no state.inputs: remove existentes desta unidade+mês, adiciona novas
-      const yyyymm = year+'-'+String(now.getMonth()+1).padStart(2,'0');
+      // Substitui no state.inputs: remove TODAS as linhas desta unidade no
+      // período sincronizado (>= cutoff e <= hoje) e adiciona as novas.
       const kept = (state.inputs||[]).filter(r => {
         if (r.unidade !== unidade) return true;
         const d = String(r.data||'').slice(0,10);
-        return !d.startsWith(yyyymm);
+        return !(d >= REPORT_CUTOFF && d <= todayStr);
       });
       state.inputs = [...kept, ...rows];
       saveState();
-      showBanner('✓ '+unidade+': '+rows.length+' linha'+(rows.length!==1?'s':'')+' importadas ('+monthName+' '+year+')', 'success');
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green)">✓ '+escapeHtml(unidade)+': '+rows.length+' linhas</span>';
+      showBanner('✓ '+unidade+': '+rows.length+' linha'+(rows.length!==1?'s':'')+' importadas ('+mesesComDados.join(', ')+')', 'success');
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green)">✓ '+escapeHtml(unidade)+': '+rows.length+' linhas ('+mesesComDados.join(', ')+')</span>';
       // Re-render
       renderInputsKpis();
       renderInputsGrouped('t-inputs');
