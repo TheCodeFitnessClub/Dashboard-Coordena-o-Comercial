@@ -1166,6 +1166,19 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
   </div>
 </div>
 
+<!-- Modal: Aviso "O que tens para fazer" (ao abrir a dashboard) -->
+<div class="modal-bg" id="todo-modal-bg">
+  <div class="modal" id="todo-modal" style="max-width:640px">
+    <h3 id="todo-modal-title" style="margin-bottom:4px">📋 O que tens para fazer</h3>
+    <div style="font-size:11px;color:var(--grey);margin-bottom:14px">Tarefas por concluir e rotinas · aparece sempre que abres a dashboard.</div>
+    <div id="todo-modal-body" style="max-height:60vh;overflow:auto"></div>
+    <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button onclick="closeTodoModal(); const b=document.querySelector('#tabs button[data-tab=\'tarefas\']'); if(b) b.click();" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">Abrir Tarefas</button>
+      <button onclick="closeTodoModal()" class="primary" style="padding:7px 18px;border:none;border-radius:var(--radius-sm);font-size:12px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-weight:700">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Leads perdidas sem motivo -->
 <div class="modal-bg" id="semmotivo-modal-bg">
   <div class="modal" id="semmotivo-modal" style="max-width:680px">
@@ -4062,6 +4075,82 @@ document.getElementById('semmotivo-modal-bg').addEventListener('click', e => {
   if (e.target.id === 'semmotivo-modal-bg') closeSemMotivoModal();
 });
 
+// ── Pop-up "O que tens para fazer" (Tarefas + Rotina) ao abrir a dashboard ──
+function closeTodoModal() {
+  document.getElementById('todo-modal-bg').classList.remove('show');
+}
+document.getElementById('todo-modal-bg').addEventListener('click', e => {
+  if (e.target.id === 'todo-modal-bg') closeTodoModal();
+});
+function _prioBadge(p) {
+  const c = p === 'Alta' ? 'var(--red)' : p === 'Baixa' ? 'var(--grey)' : 'var(--orange)';
+  return '<span style="display:inline-block;font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:20px;background:'+c+'22;color:'+c+'">'+escapeHtml(p||'Média')+'</span>';
+}
+function showTodoPopup() {
+  const body = document.getElementById('todo-modal-body');
+  const title = document.getElementById('todo-modal-title');
+  if (!body || !title) return;
+
+  // Tarefas por concluir (estado != Feita), ordenadas por prazo (atrasadas primeiro)
+  const hoje = new Date().toISOString().slice(0,10);
+  const tarefas = (state.tarefas || [])
+    .filter(t => (t.estado || 'A fazer') !== 'Feita')
+    .filter(t => (t.titulo||'').trim() || (t.descricao||'').trim())
+    .sort((a,b) => String(a.prazo||'9999').localeCompare(String(b.prazo||'9999')));
+  const rotina = (state.rotina || []).filter(r => (r.tarefa||'').trim());
+
+  // Se não há nada, não incomodar
+  if (!tarefas.length && !rotina.length) return;
+
+  title.textContent = '📋 O que tens para fazer · ' + tarefas.length + ' tarefa' + (tarefas.length!==1?'s':'');
+  let html = '';
+
+  // ── Tarefas ──
+  html += '<div style="font-size:12px;font-weight:700;color:var(--orange);margin:2px 0 6px">✓ Tarefas ('+tarefas.length+')</div>';
+  if (!tarefas.length) {
+    html += '<div style="font-size:12px;color:var(--green);padding:2px 0 10px">Sem tarefas pendentes 🎉</div>';
+  } else {
+    html += '<div style="margin-bottom:16px">';
+    tarefas.forEach(t => {
+      const prazo = String(t.prazo||'').slice(0,10);
+      const atrasada = prazo && prazo < hoje;
+      const emCurso = (t.estado||'') === 'Em curso';
+      const extra = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean).join(' · ');
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px">'
+        + _prioBadge(t.prioridade)
+        + '<span style="flex:1;color:var(--dark)">'+escapeHtml(t.titulo||'(sem título)')
+          + (extra ? ' <span style="color:var(--grey);font-size:11px">· '+escapeHtml(extra)+'</span>' : '')
+          + (emCurso ? ' <span style="color:#60A5FA;font-size:10px;font-weight:700">EM CURSO</span>' : '')
+          + '</span>'
+        + (prazo ? '<span style="font-size:11px;font-weight:600;color:'+(atrasada?'var(--red)':'var(--grey)')+'">'+(atrasada?'⚠ ':'')+escapeHtml(prazo)+'</span>' : '')
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Rotina (agrupada por frequência) ──
+  if (rotina.length) {
+    const ordemFreq = ['Diária','Semanal','Mensal','Pontual'];
+    const byFreq = {};
+    rotina.forEach(r => { const f = r.frequencia || 'Outra'; (byFreq[f] = byFreq[f] || []).push(r); });
+    const freqs = [...ordemFreq.filter(f => byFreq[f]), ...Object.keys(byFreq).filter(f => !ordemFreq.includes(f))];
+    html += '<div style="font-size:12px;font-weight:700;color:var(--orange);margin:4px 0 6px">🔁 Rotina</div>';
+    freqs.forEach(f => {
+      html += '<div style="font-size:11px;font-weight:700;color:var(--grey);margin:6px 0 3px;text-transform:uppercase;letter-spacing:.5px">'+escapeHtml(f)+'</div>';
+      byFreq[f].forEach(r => {
+        const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
+        html += '<div style="padding:4px 0;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dark)">'
+          + escapeHtml(r.tarefa)
+          + (extra ? ' <span style="color:var(--grey);font-size:11px">· '+escapeHtml(extra)+'</span>' : '')
+          + '</div>';
+      });
+    });
+  }
+
+  body.innerHTML = html;
+  document.getElementById('todo-modal-bg').classList.add('show');
+}
+
 function renderMotivosPerdidoChart() {
   const ctx = document.getElementById('chart-motivos-perdido');
   if (!ctx) return;
@@ -6909,12 +6998,16 @@ function _runOneShotRestoreDataEntrada() {
   if (dirty) { console.log("[restore v2] dataEntrada restaurada / dataEntradaSLA removida"); saveState(); }
 }
 
+// Pop-up "O que tens para fazer" — mostra UMA vez ao abrir a dashboard.
+let _todoShown = false;
+function _showTodoOnce() { if (_todoShown) return; _todoShown = true; try { showTodoPopup(); } catch(_) {} }
 if (SERVER_SYNC) {
   pullStateFromServer().then(changed => {
     _runOneShotCleanupInputs();
     _runOneShotMigrateNova();
     _runOneShotRestoreDataEntrada();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
+    _showTodoOnce();
   });
   // Polling a cada 30 segundos — mantém todos os utilizadores sincronizados
   setInterval(async () => {
@@ -6922,6 +7015,8 @@ if (SERVER_SYNC) {
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   }, 30000);
 }
+// Fallback: garante que o pop-up aparece mesmo sem servidor / se o pull falhar.
+setTimeout(_showTodoOnce, 1500);
 // API Closum — inicializar UI e arrancar sync automático
 renderAPISettingsUI();
 // Atualizar objetivos automaticamente quando o dia muda (dias úteis restantes diminuem)
