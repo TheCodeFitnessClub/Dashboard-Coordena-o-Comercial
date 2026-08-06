@@ -3651,6 +3651,9 @@ function renderDashboard() {
     const churnCls = churnGlobal===null ? 'none' : churnGlobal<=3 ? 'good' : churnGlobal<=6 ? 'warn' : 'bad';
     const churnSub = churnSubMes ? 'período inferior a um mês' : 'média do churn mensal';
 
+    // Quadro "O que há para fazer" (Tarefas | Rotina) — por cima dos dados gerais
+    h += _todoBoardHtml();
+
     h += '<div class="dash-section-label">Dados gerais do negócio</div>';
     h += '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:4px">';
     h += _kpiCard('Churn', churnVal, churnSub, churnCls);
@@ -4149,6 +4152,62 @@ function showTodoPopup() {
 
   body.innerHTML = html;
   document.getElementById('todo-modal-bg').classList.add('show');
+}
+
+// Quadro "O que há para fazer" (Tarefas | Rotina) — para a dashboard.
+function _todoBoardHtml() {
+  const hoje = new Date().toISOString().slice(0,10);
+  const tarefas = (state.tarefas || [])
+    .filter(t => (t.estado || 'A fazer') !== 'Feita' && ((t.titulo||'').trim() || (t.descricao||'').trim()))
+    .sort((a,b) => String(a.prazo||'9999').localeCompare(String(b.prazo||'9999')));
+  const rotina = (state.rotina || []).filter(r => (r.tarefa||'').trim());
+
+  let tHtml = '';
+  if (!tarefas.length) tHtml = '<div style="font-size:12px;color:var(--grey);padding:6px 0">Sem tarefas pendentes 🎉</div>';
+  else tarefas.forEach(t => {
+    const prazo = String(t.prazo||'').slice(0,10);
+    const atrasada = prazo && prazo < hoje;
+    const emCurso = (t.estado||'') === 'Em curso';
+    const extra = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean).join(' · ');
+    tHtml += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">'
+      + _prioBadge(t.prioridade)
+      + '<span style="flex:1;color:var(--dark)">'+escapeHtml(t.titulo||'(sem título)')
+        + (extra ? ' <span style="color:var(--grey);font-size:10.5px">· '+escapeHtml(extra)+'</span>' : '')
+        + (emCurso ? ' <span style="color:#60A5FA;font-size:9.5px;font-weight:700">EM CURSO</span>' : '')
+        + '</span>'
+      + (prazo ? '<span style="font-size:10.5px;font-weight:600;color:'+(atrasada?'var(--red)':'var(--grey)')+'">'+(atrasada?'⚠ ':'')+escapeHtml(prazo)+'</span>' : '')
+      + '</div>';
+  });
+
+  let rHtml = '';
+  if (!rotina.length) rHtml = '<div style="font-size:12px;color:var(--grey);padding:6px 0">Sem rotinas definidas</div>';
+  else {
+    const ordem = ['Diária','Semanal','Mensal','Pontual'];
+    const byF = {};
+    rotina.forEach(r => { const f = r.frequencia || 'Outra'; (byF[f] = byF[f] || []).push(r); });
+    const freqs = [...ordem.filter(f => byF[f]), ...Object.keys(byF).filter(f => !ordem.includes(f))];
+    freqs.forEach(f => {
+      rHtml += '<div style="font-size:10px;font-weight:700;color:var(--grey);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.5px">'+escapeHtml(f)+'</div>';
+      byF[f].forEach(r => {
+        const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
+        rHtml += '<div style="padding:3px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--dark)">'
+          + escapeHtml(r.tarefa) + (extra ? ' <span style="color:var(--grey);font-size:10.5px">· '+escapeHtml(extra)+'</span>' : '')
+          + '</div>';
+      });
+    });
+  }
+
+  return '<div class="dash-section-label">O que há para fazer</div>'
+    + '<div class="grid c2" style="gap:14px;margin-bottom:14px">'
+    + '<div class="chart-wrap" style="height:auto;padding:14px 16px">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">✓ Tarefas <span style="color:var(--grey);font-weight:400">('+tarefas.length+')</span></div>'
+      + '<div style="max-height:230px;overflow:auto">'+tHtml+'</div>'
+    + '</div>'
+    + '<div class="chart-wrap" style="height:auto;padding:14px 16px">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">🔁 Rotina</div>'
+      + '<div style="max-height:230px;overflow:auto">'+rHtml+'</div>'
+    + '</div>'
+    + '</div>';
 }
 
 function renderMotivosPerdidoChart() {
@@ -6998,16 +7057,12 @@ function _runOneShotRestoreDataEntrada() {
   if (dirty) { console.log("[restore v2] dataEntrada restaurada / dataEntradaSLA removida"); saveState(); }
 }
 
-// Pop-up "O que tens para fazer" — mostra UMA vez ao abrir a dashboard.
-let _todoShown = false;
-function _showTodoOnce() { if (_todoShown) return; _todoShown = true; try { showTodoPopup(); } catch(_) {} }
 if (SERVER_SYNC) {
   pullStateFromServer().then(changed => {
     _runOneShotCleanupInputs();
     _runOneShotMigrateNova();
     _runOneShotRestoreDataEntrada();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
-    _showTodoOnce();
   });
   // Polling a cada 30 segundos — mantém todos os utilizadores sincronizados
   setInterval(async () => {
@@ -7015,8 +7070,6 @@ if (SERVER_SYNC) {
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   }, 30000);
 }
-// Fallback: garante que o pop-up aparece mesmo sem servidor / se o pull falhar.
-setTimeout(_showTodoOnce, 1500);
 // API Closum — inicializar UI e arrancar sync automático
 renderAPISettingsUI();
 // Atualizar objetivos automaticamente quando o dia muda (dias úteis restantes diminuem)
