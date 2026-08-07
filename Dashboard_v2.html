@@ -784,8 +784,11 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <button id="btn-sync-closum" onclick="manualSyncClosum()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🔄 Sincronizar Closum</button>
+      <button id="btn-period-sync-closum" onclick="openPeriodSyncModal()" style="padding:5px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s">🗓️ Sincronizar período…</button>
     </div>
   </div>
+
+  <div id="closum-discrepancy-banner" style="display:none;align-items:center;gap:10px;justify-content:space-between;margin-bottom:14px;padding:9px 14px;background:#F9731622;border:1.5px solid #F97316;border-radius:var(--radius-sm);font-size:12px;color:var(--dark);flex-wrap:wrap"></div>
 
   <nav class="sub-tabs" data-group="closum">
     <button class="active" data-subtab="dados">Dados &amp; Gráficos</button>
@@ -1187,6 +1190,27 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="semmotivo-modal-body" style="max-height:55vh;overflow:auto"></div>
     <div class="actions" style="display:flex;justify-content:flex-end;margin-top:16px">
       <button onclick="closeSemMotivoModal()" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Sincronizar Closum por período -->
+<div class="modal-bg" id="period-sync-modal-bg">
+  <div class="modal" id="period-sync-modal" style="max-width:420px">
+    <h3 style="margin-bottom:4px">🗓️ Sincronizar período específico</h3>
+    <div style="font-size:11px;color:var(--grey);margin-bottom:14px">Refaz o sync do Closum apenas para as leads criadas neste intervalo — reavalia estado, motivo e source de todas (equivalente a uma sincronização completa, mas limitada ao período). Não apaga leads fora do intervalo.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:11.5px;font-weight:600;color:var(--dark)">De
+        <input type="date" id="period-sync-from" style="display:block;width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);color:var(--dark);font-family:inherit;color-scheme:dark">
+      </label>
+      <label style="font-size:11.5px;font-weight:600;color:var(--dark)">Até
+        <input type="date" id="period-sync-to" style="display:block;width:100%;margin-top:4px;padding:7px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:13px;background:var(--bg);color:var(--dark);font-family:inherit;color-scheme:dark">
+      </label>
+    </div>
+    <div id="period-sync-status" style="font-size:11.5px;color:var(--grey);margin-top:10px"></div>
+    <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button onclick="closePeriodSyncModal()" id="period-sync-cancel" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark)">Cancelar</button>
+      <button onclick="confirmPeriodSync()" id="period-sync-confirm" class="primary" style="padding:7px 18px;border:none;border-radius:var(--radius-sm);font-size:12px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-weight:700">🔄 Sincronizar</button>
     </div>
   </div>
 </div>
@@ -3886,7 +3910,7 @@ function renderConvSourceDisplay() {
     const pctP = total > 0 ? Math.round((st.perdidos/total)*100) : 0;
     const pctE = total > 0 ? Math.round((st.emCurso/total)*100)  : 0;
     const color = s === 'Tombstone' ? '#64748B' : SOURCE_COLORS[i % SOURCE_COLORS.length];
-    const lbl = s === 'Tombstone' ? 'Tombstone 🪦' : escapeHtml(s);
+    const lbl = s === 'Tombstone' ? 'Apagadas 🪦' : escapeHtml(s);
     return `<div class="kpi" style="border-left:3px solid ${color}"${s==='Tombstone'?' title="Leads apagadas na dashboard mas ainda existentes no Closum — contam aqui para o total bater com o Closum"':''}>
       <div class="lbl">${lbl}</div>
       <div class="val">${total}</div>
@@ -5890,6 +5914,7 @@ function updateSyncBadge() {
   }
   // Also update leads panel status
   updateLeadsSyncStatus(s);
+  renderClosumDiscrepancyBanner();
 }
 
 // ── Import manual de reports comerciais (Excel por clube) ─────────────────
@@ -6159,6 +6184,91 @@ async function manualSyncClosum() {
     if (cfg) cfg.textContent = '🔄 Sincronizar agora';
   }
 }
+// ── Sincronização por período (modal) ─────────────────────────────
+function openPeriodSyncModal() {
+  const from = document.getElementById('period-sync-from');
+  const to   = document.getElementById('period-sync-to');
+  if (from && !from.value) {
+    const s = getAPISettings();
+    from.value = s.closumStartDate || '2026-05-03';
+  }
+  if (to && !to.value) to.value = new Date().toISOString().slice(0,10);
+  const st = document.getElementById('period-sync-status');
+  if (st) st.textContent = '';
+  document.getElementById('period-sync-modal-bg').classList.add('show');
+}
+function closePeriodSyncModal() {
+  document.getElementById('period-sync-modal-bg').classList.remove('show');
+}
+document.getElementById('period-sync-modal-bg').addEventListener('click', e => {
+  if (e.target.id === 'period-sync-modal-bg') closePeriodSyncModal();
+});
+async function confirmPeriodSync() {
+  const from = document.getElementById('period-sync-from').value;
+  const to   = document.getElementById('period-sync-to').value;
+  const st   = document.getElementById('period-sync-status');
+  if (!from || !to) { if (st) st.innerHTML = '<span style="color:var(--red)">Preenche as duas datas.</span>'; return; }
+  if (from > to) { if (st) st.innerHTML = '<span style="color:var(--red)">A data "De" não pode ser depois da data "Até".</span>'; return; }
+  const btn = document.getElementById('period-sync-confirm');
+  const cancelBtn = document.getElementById('period-sync-cancel');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ A sincronizar…'; }
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (st) st.innerHTML = '<span style="color:var(--grey)">⏳ A sincronizar leads de ' + from + ' a ' + to + '…</span>';
+  try {
+    await doSyncClosum(false, false, { dateFrom: from, dateTo: to });
+    if (st) st.innerHTML = '<span style="color:var(--green)">✓ Período sincronizado.</span>';
+    setTimeout(closePeriodSyncModal, 900);
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--red)">Erro: ' + escapeHtml(e.message) + '</span>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Sincronizar'; }
+    if (cancelBtn) cancelBtn.disabled = false;
+  }
+}
+
+// ── Banner de discrepância vs Closum ──────────────────────────────
+let _lastClosumCheck = null;
+try {
+  const _raw = localStorage.getItem('closum_last_check');
+  if (_raw) _lastClosumCheck = JSON.parse(_raw);
+} catch(_) {}
+let _closumBannerDismissedTs = null;
+function dismissClosumDiscrepancyBanner() {
+  _closumBannerDismissedTs = _lastClosumCheck ? _lastClosumCheck.ts : 'x';
+  const el = document.getElementById('closum-discrepancy-banner');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+function renderClosumDiscrepancyBanner() {
+  const el = document.getElementById('closum-discrepancy-banner');
+  if (!el) return;
+  const c = _lastClosumCheck;
+  if (!c || (_closumBannerDismissedTs && _closumBannerDismissedTs === c.ts)) {
+    el.style.display = 'none'; el.innerHTML = '';
+    return;
+  }
+  const msgs = [];
+  if (c.estadoDiff && c.estadoDiff !== 0) {
+    const n = Math.abs(c.estadoDiff);
+    msgs.push(`⚠ ${n} lead${n!==1?'s':''} de diferença face ao Closum (estado "Negócio Perdido"${c.janelaLabel ? ' · '+c.janelaLabel : ''}).`);
+  }
+  if (c.motivoFetchFailures > 0) {
+    msgs.push(`⚠ ${c.motivoFetchFailures} lead${c.motivoFetchFailures!==1?'s':''} não pôde${c.motivoFetchFailures!==1?'ram':''} ser verificada${c.motivoFetchFailures!==1?'s':''} quanto ao motivo (erro de rede).`);
+  }
+  if (c.pendingMotivo > 0) {
+    msgs.push(`ℹ ${c.pendingMotivo} lead${c.pendingMotivo!==1?'s':''} perdida${c.pendingMotivo!==1?'s':''} ainda por verificar quanto ao motivo — serão verificadas nos próximos syncs.`);
+  }
+  if (!msgs.length) {
+    el.style.display = 'none'; el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `<span>${msgs.join(' ')}</span>
+    <span style="display:flex;gap:6px;flex-shrink:0">
+      <button onclick="manualFullSyncClosum()" style="padding:4px 12px;border:1.5px solid #F97316;border-radius:6px;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;font-weight:700;color:#F97316">🔁 Reconciliar (sync completa)</button>
+      <button onclick="dismissClosumDiscrepancyBanner()" style="padding:4px 10px;border:none;border-radius:6px;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;font-weight:600;color:var(--grey)">Dispensar</button>
+    </span>`;
+}
+
 // Sincronização COMPLETA on-demand: re-verifica a source de TODAS as leads
 // (apanha alterações de source feitas no Closum). Mais lenta (mais chamadas à API).
 async function manualFullSyncClosum() {
@@ -6250,7 +6360,7 @@ function closumUserToComercial(closumUserName) {
   return membro ? (membro.comercial || '') : '';
 }
 
-async function doSyncClosum(silent = false, forceAllSource = false) {
+async function doSyncClosum(silent = false, forceAllSource = false, periodOpts = null) {
   if (_syncInProgress) {
     console.log('[Closum sync] Já existe um sync em curso, a ignorar este pedido');
     return;
@@ -6262,7 +6372,16 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     _syncInProgress = false;
     return;
   }
-  const startTs = new Date((s.closumStartDate || '2026-05-03') + 'T00:00:00').getTime();
+  // Sync de período: dateFrom/dateTo restringem a janela e forçam reavaliação
+  // completa (source + motivo) só dessas leads; nunca apaga leads fora do intervalo.
+  const isPeriodSync = !!(periodOpts && (periodOpts.dateFrom || periodOpts.dateTo));
+  if (isPeriodSync) forceAllSource = true;
+  const startTs = periodOpts && periodOpts.dateFrom
+    ? new Date(periodOpts.dateFrom + 'T00:00:00').getTime()
+    : new Date((s.closumStartDate || '2026-05-03') + 'T00:00:00').getTime();
+  const endTs = periodOpts && periodOpts.dateTo
+    ? new Date(periodOpts.dateTo + 'T23:59:59').getTime()
+    : Infinity;
   const elStatus = document.getElementById('leads-sync-status');
   if (elStatus) elStatus.innerHTML = '<span style="color:var(--grey)">⏳ A sincronizar com Closum…</span>';
   try {
@@ -6280,9 +6399,10 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
       const pageLeads = data.responseData?.leads || [];
       let anyNew = false;
       for (const l of pageLeads) {
-        if (new Date(l.creation_date).getTime() >= startTs) {
-          allApiLeads.push(l);
-          anyNew = true;
+        const lt = new Date(l.creation_date).getTime();
+        if (lt >= startTs) {
+          anyNew = true; // controla a paginação mesmo que fique fora do endTs
+          if (lt <= endTs) allApiLeads.push(l);
         }
       }
       // Only stop pagination when an entire page had no leads newer than startDate
@@ -6455,12 +6575,13 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
 
     console.log('[Closum sync] Backfill source:', sourceBackfillDone ? 'JÁ FEITO' : 'EM CURSO — vai buscar detalhe para', idsToFetch.length, 'leads (batches de '+BATCH_SIZE+')');
     let errors502 = 0;
+    let motivoFetchFailures = 0; // leads perdidas cujo motivo não foi possível verificar neste sync
     for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
       const batch = idsToFetch.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (id) => {
         try {
           const dData = await fetchDetailWithRetry(id);
-          if (!dData) { errors502++; return; }
+          if (!dData) { errors502++; if (needsMotivo.has(id)) motivoFetchFailures++; return; }
           if (!firstDetailLogged) {
             console.log('[Closum sync] Estrutura do detalhe (1º lead):', dData);
             const ldDbg = dData.responseData?.lead_data || dData.responseData || {};
@@ -6484,6 +6605,7 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
           }
         } catch(e) {
           errors502++;
+          if (needsMotivo.has(id)) motivoFetchFailures++;
           console.warn('[Closum sync] Erro a buscar detalhe da lead', id, e.message);
         }
       }));
@@ -6495,6 +6617,11 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     if (errors502 > 0) console.warn('[Closum sync] Erros de detalhe:', errors502, '/', idsToFetch.length);
     console.log('[Closum sync] Total motivos encontrados:', Object.keys(detailMap).length,
                 '· sources encontradas:', Object.keys(sourceMap).length);
+    // Leads perdidas cujo motivo ainda não foi sequer tentado neste sync
+    // (ficaram fora da janela rotativa — só relevante em sync normal, não em full/período).
+    const idsToFetchSet = new Set(idsToFetch);
+    const pendingMotivo = forceAllSource ? 0
+      : [...needsMotivo].filter(id => !idsToFetchSet.has(id)).length;
 
     // ── Notas (Histórico da Lead) → tempos precisos ──────────────────────────
     // notesMap[id] = { passagem, primeiro } (timestamps "YYYY-MM-DDTHH:MM")
@@ -6691,7 +6818,10 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     // Guarda de segurança: só corre se o sync trouxe leads (evita apagar tudo
     // por causa de um erro de rede que devolveu 0 leads).
     let removedApagadas = 0;
-    if (allApiLeads.length > 0) {
+    // Num sync de período (janela restrita) NUNCA apagamos leads — a ausência
+    // de uma lead em allApiLeads pode ser só por estar fora do intervalo escolhido,
+    // não porque foi apagada no Closum.
+    if (!isPeriodSync && allApiLeads.length > 0) {
       const closumIds = new Set(allApiLeads.map(l => 'CLO-' + l.id));
       const beforeApag = state.leads.length;
       state.leads = state.leads.filter(l => {
@@ -6721,6 +6851,27 @@ async function doSyncClosum(silent = false, forceAllSource = false) {
     updateSyncBadge();
     // Marcar backfill de source como concluído após sync bem sucedido
     try { localStorage.setItem('closum_source_backfill_v2_done', '1'); } catch(_) {}
+
+    // ── Verificação de consistência Estado/Motivo vs Closum ──────────────
+    // Estado: cada lead sincronizada tem a sequência atribuída directamente do
+    // Closum, por isso um desvio aqui só surge se alguma lead do Closum não
+    // tiver sido corretamente espelhada (ex: falha a meio do processamento).
+    const closumIdsChecked = new Set(allApiLeads.map(l => 'CLO-' + l.id));
+    const closumPerdidoCount = allApiLeads.filter(l => isLostSeq(mapSeqToResultado(l.lead_sales_sequence))).length;
+    const dashPerdidoCount = state.leads.filter(l => closumIdsChecked.has(l.leadId) && isLostSeq(l.sequencia)).length;
+    const estadoDiff = closumPerdidoCount - dashPerdidoCount;
+    _lastClosumCheck = {
+      ts: now,
+      isPeriodSync, forceAllSource,
+      estadoDiff,
+      pendingMotivo,
+      motivoFetchFailures,
+      janelaLabel: isPeriodSync
+        ? `${(periodOpts.dateFrom||'…')} a ${(periodOpts.dateTo||'…')}`
+        : '',
+    };
+    try { localStorage.setItem('closum_last_check', JSON.stringify(_lastClosumCheck)); } catch(_) {}
+    renderClosumDiscrepancyBanner();
 
     if (elStatus) {
       elStatus.innerHTML = `<span style="color:var(--green)">✓ Sincronizado às ${now.split('T')[1]} · ${novos} nova${novos!==1?'s':''} · ${atualizadas} actualizada${atualizadas!==1?'s':''}</span>`;
