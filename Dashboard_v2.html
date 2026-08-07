@@ -1469,7 +1469,7 @@ let state = {
   kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   ficheiros:[],
-  deletedLeadIds:[],
+  deletedLeadIds:[], deletedLeads:[],
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
 let _filtersBackup = null; // saved {unit, com} before entering compare mode, restored on exit
@@ -3083,6 +3083,17 @@ function deleteRow(schemaKey, idx) {
     if (lead && lead.leadId) {
       state.deletedLeadIds = state.deletedLeadIds || [];
       if (!state.deletedLeadIds.includes(lead.leadId)) state.deletedLeadIds.push(lead.leadId);
+      // Snapshot da lead apagada → alimenta o card "Tombstone" (reconciliação c/ Closum)
+      state.deletedLeads = state.deletedLeads || [];
+      if (!state.deletedLeads.some(x => x.leadId === lead.leadId)) {
+        state.deletedLeads.push({
+          leadId: lead.leadId, nome: lead.nome || '',
+          dataCriacao: lead.dataCriacao || lead.dataEntrada || '',
+          dataEntrada: lead.dataEntrada || '',
+          comercial: lead.comercial || '', source: lead.source || '',
+          sequencia: lead.sequencia || lead.resultado || '',
+        });
+      }
     }
   }
   state[schemaKey].splice(idx,1);
@@ -3795,6 +3806,7 @@ const SOURCE_BASELINE = [
   'Walk-in não convertido',
   'REFS',
   'OUT',
+  'Tombstone',
 ];
 
 function _leadsRespeitamFiltrosUnitCom(previous) {
@@ -3839,6 +3851,25 @@ function aggregateSources(previous) {
     stats[s].qty++;
   });
 
+  // Card "Tombstone": leads apagadas na dashboard (respeitam clube/comercial e
+  // período). Assim a soma de todos os cards = total do Closum.
+  const cmp   = previous && filters.compare && filters.compareParams ? filters.compareParams : null;
+  const unitF = cmp ? (cmp.unitB || "") : filters.unit;
+  const comF  = cmp ? (cmp.comB  || "") : filters.com;
+  let membrosT = null;
+  if (unitF) membrosT = new Set((state.equipa||[]).filter(e=>e.unidade===unitF&&e.estado!=="Inativo").map(e=>e.comercial).filter(Boolean));
+  (state.deletedLeads || []).forEach(t => {
+    if (membrosT && !membrosT.has(t.comercial)) return;
+    if (comF && t.comercial !== comF) return;
+    const dc = t.dataCriacao || t.dataEntrada;
+    if (!dc || !inPeriod(dc)) return;
+    if (!stats['Tombstone']) stats['Tombstone'] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
+    if (isWonSeq(t.sequencia))       stats['Tombstone'].ganhos++;
+    else if (isLostSeq(t.sequencia)) stats['Tombstone'].perdidos++;
+    else                             stats['Tombstone'].emCurso++;
+    stats['Tombstone'].qty++;
+  });
+
   const totalQty = Object.values(stats).reduce((a,v)=>a+v.qty,0);
   return { sources, stats, totalQty };
 }
@@ -3854,9 +3885,10 @@ function renderConvSourceDisplay() {
     const pctG = total > 0 ? Math.round((st.ganhos/total)*100)   : 0;
     const pctP = total > 0 ? Math.round((st.perdidos/total)*100) : 0;
     const pctE = total > 0 ? Math.round((st.emCurso/total)*100)  : 0;
-    const color = SOURCE_COLORS[i % SOURCE_COLORS.length];
-    return `<div class="kpi" style="border-left:3px solid ${color}">
-      <div class="lbl">${escapeHtml(s)}</div>
+    const color = s === 'Tombstone' ? '#64748B' : SOURCE_COLORS[i % SOURCE_COLORS.length];
+    const lbl = s === 'Tombstone' ? 'Tombstone 🪦' : escapeHtml(s);
+    return `<div class="kpi" style="border-left:3px solid ${color}"${s==='Tombstone'?' title="Leads apagadas na dashboard mas ainda existentes no Closum — contam aqui para o total bater com o Closum"':''}>
+      <div class="lbl">${lbl}</div>
       <div class="val">${total}</div>
       <div class="sub">
         <span style="color:#22C55E">${st.ganhos} ganhos (${pctG}%)</span> ·
