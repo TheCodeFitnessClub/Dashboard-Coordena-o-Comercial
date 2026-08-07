@@ -432,12 +432,27 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .notif-when{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;padding-top:2px}
 .notif.is-late{background:var(--red-l);border-color:rgba(248,113,113,.35)}
 .notif.is-doing{border-left:3px solid var(--blue)}
-/* Campos dentro do card estilo log (input/select a condizer com o textarea) */
-.log-section input,.log-section select{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;color:var(--dark);background:var(--bg);box-sizing:border-box;color-scheme:dark;transition:border-color .15s}
-.log-section input:focus,.log-section select:focus{outline:none;border-color:var(--orange);background:var(--card-bg)}
-.log-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.log-field-lbl{font-size:10px;font-weight:600;color:var(--grey);margin-bottom:4px;display:block}
-@media(max-width:640px){.log-grid2{grid-template-columns:1fr}}
+/* Cartão de notificação estático (pré-visualização) — sem afordância de clique */
+.notif.is-static{cursor:default}
+.notif.is-static:hover{border-color:var(--line);box-shadow:none;transform:none}
+/* ── Modal de tarefa — mesma linguagem gráfica das notificações ─────── */
+.tarefa-modal{background:var(--card-bg);border-radius:var(--radius);max-width:560px;margin:0 auto;padding:20px 22px;box-shadow:0 8px 40px rgba(0,0,0,.45)}
+.tarefa-modal-head{display:flex;align-items:flex-start;gap:11px;margin-bottom:16px}
+.tarefa-modal-title{font-size:15px;font-weight:700;color:var(--dark);line-height:1.3}
+.tarefa-modal-meta{font-size:11px;color:var(--grey);margin-top:2px}
+.tarefa-modal-x{background:none;border:none;font-size:20px;cursor:pointer;color:var(--grey);padding:0;line-height:1;margin-left:auto}
+.tarefa-prev-lbl{font-size:9.5px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.tarefa-prev{margin-bottom:18px;padding:9px;background:var(--grey-l);border-radius:12px}
+.tarefa-field{margin-bottom:13px}
+.tarefa-field>label{font-size:9.5px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:block}
+.tarefa-field input,.tarefa-field textarea,.tarefa-field select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:12.5px;font-family:inherit;color:var(--dark);background:var(--bg);box-sizing:border-box;color-scheme:dark;transition:border-color .15s;resize:vertical}
+.tarefa-field input:focus,.tarefa-field textarea:focus,.tarefa-field select:focus{outline:none;border-color:var(--orange)}
+.tarefa-grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.pill-row{display:flex;gap:6px;flex-wrap:wrap}
+.pill{padding:5px 13px;border-radius:20px;border:1px solid var(--line);background:var(--bg);color:var(--grey);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s,color .15s}
+.pill:hover{border-color:var(--grey)}
+.tarefa-modal-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+@media(max-width:640px){.tarefa-grid2{grid-template-columns:1fr}}
 .kanban-pagination{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
 .kanban-pagination button{background:var(--card-bg);border:1px solid var(--line);color:var(--grey);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer}
 .kanban-pagination button:hover:not(:disabled){background:var(--orange);border-color:var(--orange);color:#fff}
@@ -1027,74 +1042,69 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
   </div>
 </div>
 
-<!-- Modal tarefa (criar / editar) — mesmo card do log de reuniões -->
+<!-- Modal tarefa (criar / editar) — mesma linguagem gráfica das notificações da Dashboard -->
 <div class="log-modal-bg" id="tarefa-modal-bg" onclick="if(event.target===this)closeTarefaModal()">
-  <div class="log-modal" style="max-width:640px">
-    <div class="log-modal-head">
+  <div class="tarefa-modal">
+    <div class="tarefa-modal-head">
+      <div class="notif-icon" id="tarefa-modal-icon">✓</div>
       <div>
-        <div class="log-modal-title" id="tarefa-modal-title">Nova tarefa</div>
-        <div class="log-modal-meta" id="tarefa-modal-meta"></div>
+        <div class="tarefa-modal-title" id="tarefa-modal-title">Nova tarefa</div>
+        <div class="tarefa-modal-meta" id="tarefa-modal-meta"></div>
       </div>
-      <button onclick="closeTarefaModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--grey);padding:0;line-height:1">×</button>
+      <button class="tarefa-modal-x" onclick="closeTarefaModal()">×</button>
     </div>
 
-    <div class="log-section">
-      <div class="log-section-label">✏️ Título</div>
-      <input type="text" id="tarefa-f-titulo" placeholder="O que é preciso fazer?" autocomplete="off">
+    <!-- Pré-visualização: o mesmo cartão que vai aparecer na aba Dashboard -->
+    <div class="tarefa-prev-lbl">Como vai aparecer na Dashboard</div>
+    <div class="tarefa-prev" id="tarefa-preview"></div>
+
+    <div class="tarefa-field">
+      <label for="tarefa-f-titulo">Título</label>
+      <input type="text" id="tarefa-f-titulo" placeholder="O que é preciso fazer?" autocomplete="off" oninput="_updateTarefaPreview()">
     </div>
 
-    <div class="log-section">
-      <div class="log-section-label">📝 Descrição</div>
-      <textarea id="tarefa-f-descricao" rows="6" placeholder="Contexto, passos, links, o que for preciso para não te esqueceres…"></textarea>
+    <div class="tarefa-field">
+      <label for="tarefa-f-descricao">Descrição</label>
+      <textarea id="tarefa-f-descricao" rows="4" placeholder="Contexto, passos, links — o que for preciso para não te esqueceres…" oninput="_updateTarefaPreview()"></textarea>
     </div>
 
-    <div class="log-section">
-      <div class="log-section-label">⚑ Estado &amp; prioridade</div>
-      <div class="log-grid2">
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-estado">Estado</label>
-          <select id="tarefa-f-estado"></select>
-        </div>
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-prioridade">Prioridade</label>
-          <select id="tarefa-f-prioridade"></select>
-        </div>
+    <div class="tarefa-field">
+      <label>Prioridade</label>
+      <div class="pill-row" id="tarefa-pills-prio"></div>
+    </div>
+
+    <div class="tarefa-field">
+      <label>Estado</label>
+      <div class="pill-row" id="tarefa-pills-estado"></div>
+    </div>
+
+    <div class="tarefa-grid2">
+      <div class="tarefa-field">
+        <label for="tarefa-f-criadoem">Data de criação</label>
+        <input type="date" id="tarefa-f-criadoem" onchange="_updateTarefaPreview()">
       </div>
-    </div>
-
-    <div class="log-section">
-      <div class="log-section-label">🗓️ Datas</div>
-      <div class="log-grid2">
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-criadoem">Data de criação</label>
-          <input type="date" id="tarefa-f-criadoem">
-        </div>
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-prazo">Prazo</label>
-          <input type="date" id="tarefa-f-prazo">
-        </div>
+      <div class="tarefa-field">
+        <label for="tarefa-f-prazo">Prazo</label>
+        <input type="date" id="tarefa-f-prazo" onchange="_updateTarefaPreview()">
       </div>
     </div>
 
-    <div class="log-section">
-      <div class="log-section-label">👤 Atribuição</div>
-      <div class="log-grid2">
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-responsavel">Responsável</label>
-          <select id="tarefa-f-responsavel"></select>
-        </div>
-        <div>
-          <label class="log-field-lbl" for="tarefa-f-unidade">Unidade</label>
-          <select id="tarefa-f-unidade"></select>
-        </div>
+    <div class="tarefa-grid2">
+      <div class="tarefa-field">
+        <label for="tarefa-f-responsavel">Responsável</label>
+        <select id="tarefa-f-responsavel" onchange="_updateTarefaPreview()"></select>
+      </div>
+      <div class="tarefa-field">
+        <label for="tarefa-f-unidade">Unidade</label>
+        <select id="tarefa-f-unidade" onchange="_updateTarefaPreview()"></select>
       </div>
     </div>
 
-    <div class="log-footer">
+    <div class="tarefa-modal-foot">
       <span class="log-saved" id="tarefa-modal-status"></span>
       <div style="display:flex;gap:8px">
-        <button onclick="closeTarefaModal()" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--card-bg);cursor:pointer;font-family:inherit;font-size:12px;color:var(--dark)">Cancelar</button>
-        <button onclick="saveTarefaModal()" style="padding:7px 18px;border:1.5px solid var(--orange);border-radius:var(--radius-sm);background:var(--orange);color:white;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">💾 Guardar</button>
+        <button onclick="closeTarefaModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
+        <button onclick="saveTarefaModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
       </div>
     </div>
   </div>
@@ -4311,36 +4321,14 @@ function _todoBoardHtml() {
     .sort((a,b) => String(a.prazo||'9999').localeCompare(String(b.prazo||'9999')));
   const rotina = (state.rotina || []).filter(r => (r.tarefa||'').trim());
 
-  // Tarefas em estilo "notificação": cartão clicável que abre a tarefa.
-  // Hex literal (e não var(--red)) porque juntamos o sufixo de opacidade "22";
-  // "var(--red)22" não é cor válida. Estas cores não mudam entre temas.
-  const PRIO_COR = { 'Alta':'#F87171', 'Média':'#FCD34D', 'Baixa':'#60A5FA' };
+  // Tarefas em estilo "notificação" — mesmo cartão que o formulário pré-visualiza.
   let tHtml = '';
   if (!tarefas.length) {
     tHtml = '<div style="font-size:12px;color:var(--grey);padding:14px 0;text-align:center">Sem tarefas pendentes 🎉</div>';
   } else {
-    tHtml = '<div class="notif-list">' + tarefas.map(t => {
-      const prio    = t.prioridade || 'Média';
-      const cor     = PRIO_COR[prio] || 'var(--grey)';
-      const info    = _prazoInfo(t.prazo, t.estado);
-      const emCurso = (t.estado||'') === 'Em curso';
-      const realIdx = state.tarefas.indexOf(t);
-      const meta    = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean);
-      return '<div class="notif'+(info.late?' is-late':'')+(emCurso?' is-doing':'')+'"'
-        + ' onclick="openTarefaModal('+realIdx+')" title="Clica para abrir a tarefa">'
-        + '<div class="notif-icon" style="background:'+cor+'22;color:'+cor+'">'+(info.late?'!':'✓')+'</div>'
-        + '<div class="notif-body">'
-          + '<div class="notif-title">'+escapeHtml(t.titulo||'(sem título)')+'</div>'
-          + (t.descricao ? '<div class="notif-desc">'+escapeHtml(t.descricao)+'</div>' : '')
-          + '<div class="notif-meta">'
-            + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(prio)+'</span>'
-            + (emCurso ? '<span class="notif-tag" style="color:var(--blue)">EM CURSO</span>' : '')
-            + (meta.length ? '<span>'+escapeHtml(meta.join(' · '))+'</span>' : '')
-          + '</div>'
-        + '</div>'
-        + '<div class="notif-when" style="color:'+info.color+'">'+escapeHtml(info.label)+'</div>'
-        + '</div>';
-    }).join('') + '</div>';
+    tHtml = '<div class="notif-list">'
+      + tarefas.map(t => _notifCardHtml(t, state.tarefas.indexOf(t))).join('')
+      + '</div>';
   }
 
   let rHtml = '';
@@ -5027,8 +5015,89 @@ function setKanbanPage(status, page) {
   renderKanban();
 }
 
-// ── Modal de tarefa (criar / editar) — mesmo card do log de reuniões ──────
+// ── Modal de tarefa (criar / editar) ──────────────────────────────────────
+// O formulário usa a mesma linguagem gráfica das notificações da Dashboard e
+// mostra uma pré-visualização construída pela MESMA função (_notifCardHtml).
 let _tarefaModalIdx = null;   // null = tarefa nova
+// Prioridade/estado vivem aqui porque são pills, não <select>.
+let _tarefaForm = { prioridade:'Média', estado:'A fazer' };
+
+// Hex literal (e não var(--red)): juntamos o sufixo de opacidade "22" e
+// "var(--red)22" não seria cor válida. Estas cores não mudam entre temas.
+const PRIO_COR   = { 'Alta':'#F87171', 'Média':'#FCD34D', 'Baixa':'#60A5FA' };
+const ESTADO_COR = { 'A fazer':'#6B7B8D', 'Em curso':'#60A5FA', 'Feita':'#22C55E' };
+
+// Cartão de notificação de uma tarefa. Usado na aba Dashboard E na
+// pré-visualização do formulário — é o que garante que são iguais.
+// idx = índice em state.tarefas (null → cartão estático, sem clique).
+function _notifCardHtml(t, idx) {
+  const prio    = t.prioridade || 'Média';
+  const cor     = PRIO_COR[prio] || '#6B7B8D';
+  const info    = _prazoInfo(t.prazo, t.estado);
+  const emCurso = (t.estado||'') === 'Em curso';
+  const meta    = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean);
+  const clic    = (idx === null || idx === undefined || idx < 0)
+    ? '' : ' onclick="openTarefaModal('+idx+')" title="Clica para abrir a tarefa"';
+  return '<div class="notif'+(info.late?' is-late':'')+(emCurso?' is-doing':'')+(clic?'':' is-static')+'"'+clic+'>'
+    + '<div class="notif-icon" style="background:'+cor+'22;color:'+cor+'">'+(info.late?'!':'✓')+'</div>'
+    + '<div class="notif-body">'
+      + '<div class="notif-title">'+escapeHtml(t.titulo||'(sem título)')+'</div>'
+      + (t.descricao ? '<div class="notif-desc">'+escapeHtml(t.descricao)+'</div>' : '')
+      + '<div class="notif-meta">'
+        + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(prio)+'</span>'
+        + (emCurso ? '<span class="notif-tag" style="color:#60A5FA">EM CURSO</span>' : '')
+        + (meta.length ? '<span>'+escapeHtml(meta.join(' · '))+'</span>' : '')
+      + '</div>'
+    + '</div>'
+    + '<div class="notif-when" style="color:'+info.color+'">'+escapeHtml(info.label)+'</div>'
+    + '</div>';
+}
+
+// Pills de prioridade/estado — visualmente iguais às etiquetas das notificações
+function _pillHtml(valor, ativo, cor, fn) {
+  const on = valor === ativo;
+  const st = on ? 'background:'+cor+'22;color:'+cor+';border-color:'+cor : '';
+  return '<button type="button" class="pill" style="'+st+'"'
+    + ' onclick="'+fn+'(\''+valor.replace(/'/g,"\\'")+'\')">'+escapeHtml(valor)+'</button>';
+}
+function _renderTarefaPills() {
+  const p = document.getElementById('tarefa-pills-prio');
+  if (p) p.innerHTML = TASK_PRIO.map(v =>
+    _pillHtml(v, _tarefaForm.prioridade, PRIO_COR[v] || '#6B7B8D', 'setTarefaPrio')).join('');
+  const e = document.getElementById('tarefa-pills-estado');
+  if (e) e.innerHTML = TASK_STATUS.map(v =>
+    _pillHtml(v, _tarefaForm.estado, ESTADO_COR[v] || '#6B7B8D', 'setTarefaEstado')).join('');
+}
+function setTarefaPrio(v)   { _tarefaForm.prioridade = v; _renderTarefaPills(); _updateTarefaPreview(); }
+function setTarefaEstado(v) { _tarefaForm.estado     = v; _renderTarefaPills(); _updateTarefaPreview(); }
+
+// Lê o formulário todo (usado pela pré-visualização e pela gravação)
+function _tarefaFormData() {
+  const q = id => document.getElementById(id);
+  return {
+    titulo:      q('tarefa-f-titulo').value.trim(),
+    descricao:   q('tarefa-f-descricao').value.trim(),
+    estado:      _tarefaForm.estado,
+    prioridade:  _tarefaForm.prioridade,
+    responsavel: q('tarefa-f-responsavel').value,
+    unidade:     q('tarefa-f-unidade').value,
+    criadoEm:    q('tarefa-f-criadoem').value,
+    prazo:       q('tarefa-f-prazo').value,
+  };
+}
+function _updateTarefaPreview() {
+  const prev = document.getElementById('tarefa-preview');
+  if (!prev) return;
+  const d = _tarefaFormData();
+  prev.innerHTML = _notifCardHtml(d, null);
+  // Ícone do cabeçalho acompanha a prioridade escolhida
+  const ic = document.getElementById('tarefa-modal-icon');
+  if (ic) {
+    const c = PRIO_COR[d.prioridade] || '#6B7B8D';
+    ic.style.background = c + '22';
+    ic.style.color = c;
+  }
+}
 
 // Etiqueta relativa do prazo — usada nas notificações da aba Dashboard.
 function _prazoInfo(prazo, estado) {
@@ -5062,20 +5131,21 @@ function openTarefaModal(idx) {
 
   document.getElementById('tarefa-modal-title').textContent = nova ? 'Nova tarefa' : 'Editar tarefa';
   document.getElementById('tarefa-modal-meta').textContent  = nova
-    ? 'Só o título é obrigatório — o resto podes preencher depois.'
-    : [t.responsavel, t.unidade && t.unidade !== 'Geral' ? t.unidade : '',
-       t.criadoEm ? 'criada a '+fmtDate(t.criadoEm) : ''].filter(Boolean).join(' · ');
+    ? 'Só o título é obrigatório.'
+    : ('Criada a ' + (t.criadoEm ? fmtDate(t.criadoEm) : '—'));
 
   document.getElementById('tarefa-f-titulo').value    = t.titulo || '';
   document.getElementById('tarefa-f-descricao').value = t.descricao || '';
-  _fillSelect(document.getElementById('tarefa-f-estado'),      TASK_STATUS, t.estado || 'A fazer');
-  _fillSelect(document.getElementById('tarefa-f-prioridade'),  TASK_PRIO,   t.prioridade || 'Média');
+  _tarefaForm.estado     = TASK_STATUS.includes(t.estado)     ? t.estado     : 'A fazer';
+  _tarefaForm.prioridade = TASK_PRIO.includes(t.prioridade)   ? t.prioridade : 'Média';
+  _renderTarefaPills();
   _fillSelect(document.getElementById('tarefa-f-responsavel'),
               ['', ...getDynamicOptions('comerciaisAndCoord')], t.responsavel || '', '— sem responsável —');
   _fillSelect(document.getElementById('tarefa-f-unidade'),     ['Geral', ...UNIDADES], t.unidade || 'Geral');
   document.getElementById('tarefa-f-criadoem').value = t.criadoEm || new Date().toISOString().slice(0,10);
   document.getElementById('tarefa-f-prazo').value    = t.prazo || '';
   document.getElementById('tarefa-modal-status').textContent = '';
+  _updateTarefaPreview();
 
   document.getElementById('tarefa-modal-bg').style.display = 'block';
   setTimeout(() => document.getElementById('tarefa-f-titulo').focus(), 50);
@@ -5087,24 +5157,14 @@ function closeTarefaModal() {
 }
 
 function saveTarefaModal() {
-  const st     = document.getElementById('tarefa-modal-status');
-  const titulo = document.getElementById('tarefa-f-titulo').value.trim();
-  if (!titulo) {
+  const st    = document.getElementById('tarefa-modal-status');
+  const dados = _tarefaFormData();
+  if (!dados.titulo) {
     st.style.color = 'var(--red)';
     st.textContent = 'O título é obrigatório.';
     document.getElementById('tarefa-f-titulo').focus();
     return;
   }
-  const dados = {
-    titulo,
-    descricao:   document.getElementById('tarefa-f-descricao').value.trim(),
-    estado:      document.getElementById('tarefa-f-estado').value,
-    prioridade:  document.getElementById('tarefa-f-prioridade').value,
-    responsavel: document.getElementById('tarefa-f-responsavel').value,
-    unidade:     document.getElementById('tarefa-f-unidade').value,
-    criadoEm:    document.getElementById('tarefa-f-criadoem').value,
-    prazo:       document.getElementById('tarefa-f-prazo').value,
-  };
   const nova = _tarefaModalIdx === null;
   if (nova) state.tarefas.push(dados);
   else      Object.assign(state.tarefas[_tarefaModalIdx], dados);
@@ -7382,7 +7442,7 @@ function renderKpisMensais() {
 }
 
 // Garante que os dados são guardados mesmo que o refresh aconteça antes do debounce dos 250ms
-window.addEventListener('beforeunload', () => { saveNow(); saveConc(); });
+window.addEventListener('beforeunload', () => { saveNow(); });
 
 // ── Boot ───────────────────────────────────────────────────
 loadState();
