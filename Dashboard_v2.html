@@ -4171,6 +4171,11 @@ function renderConvSourceChart() {
   // (mesma lógica da Conversão Closum: % de win entre as fechadas no período)
   const labels = [], data = [], colors = [], tooltipMeta = [];
   sources.forEach((s, i) => {
+    // "Tombstone" (cartão "Apagadas") existe só para a soma dos cards bater com
+    // o total do Closum. Não é um tipo de lead, por isso fica fora deste gráfico.
+    // O índice `i` mantém-se o original, para as barras conservarem a mesma cor
+    // dos cards de cima.
+    if (s === 'Tombstone') return;
     const st = stats[s];
     const fechadas = (st.ganhos || 0) + (st.perdidos || 0);
     const pct = fechadas > 0 ? Math.round((st.ganhos / fechadas) * 100) : 0;
