@@ -432,9 +432,9 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .notif-when{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;padding-top:2px}
 .notif.is-late{background:var(--red-l);border-color:rgba(248,113,113,.35)}
 .notif.is-doing{border-left:3px solid var(--blue)}
-/* Botão "+ Nova tarefa" no topo da coluna "A fazer" do kanban */
-.task-add-card{width:100%;background:transparent;border:1.5px dashed var(--line);border-radius:var(--radius-sm);padding:9px;margin-bottom:8px;font-size:11.5px;font-weight:700;color:var(--grey);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
-.task-add-card:hover{border-color:var(--orange);color:var(--orange)}
+/* Kanban da Rotina — 4 colunas (uma por frequência) */
+.kanban.kanban-4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:1100px){.kanban.kanban-4{grid-template-columns:repeat(2,1fr)}}
 /* Cartão de notificação estático (pré-visualização) — sem afordância de clique */
 .notif.is-static{cursor:default}
 .notif.is-static:hover{border-color:var(--line);box-shadow:none;transform:none}
@@ -908,8 +908,8 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
   <h2 class="section">Tarefas — kanban</h2>
   <div class="kanban" id="kanban"></div>
 
-  <h2 class="section">Rotina</h2>
-  <div id="t-rotina"></div>
+  <h2 class="section">Rotina — kanban</h2>
+  <div class="kanban kanban-4" id="rotina-kanban"></div>
 </section>
 
 <!-- ══════════════════════════════════════════
@@ -1083,6 +1083,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="tarefa-modal-foot">
       <span class="log-saved" id="tarefa-modal-status"></span>
       <div style="display:flex;gap:8px">
+        <button id="tarefa-modal-del" onclick="deleteTarefaFromModal()" style="display:none;padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--red)">Apagar</button>
         <button onclick="closeTarefaModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
         <button onclick="saveTarefaModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
       </div>
@@ -1141,6 +1142,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="tarefa-modal-foot">
       <span class="log-saved" id="rotina-modal-status"></span>
       <div style="display:flex;gap:8px">
+        <button id="rotina-modal-del" onclick="deleteRotinaFromModal()" style="display:none;padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--red)">Apagar</button>
         <button onclick="closeRotinaModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
         <button onclick="saveRotinaModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
       </div>
@@ -3214,9 +3216,9 @@ function updateCell(schemaKey, idx, key, value) {
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
   else state[schemaKey][idx][key] = value;
   saveState();
-  // Rotina: as opções de "Dia" dependem da frequência. Ao mudar a frequência,
-  // limpa um dia que já não faça sentido (ex: "2ªf" ao passar para Mensal) e
-  // re-desenha a tabela para o select mostrar as opções certas.
+  // Rotina: ao mudar a frequência, um dia que já não faça sentido é descartado
+  // (ex: "2ªf" ao passar para Mensal). A rotina edita-se pelo modal, mas isto
+  // protege o caso de a alteração vir de outro sítio.
   if (schemaKey==="rotina" && key==="frequencia") {
     const r = state.rotina[idx];
     if (r.frequencia === "Pontual") {
@@ -3225,7 +3227,7 @@ function updateCell(schemaKey, idx, key, value) {
     } else if (r.dia && !rotinaDiaOptions(r.frequencia).includes(r.dia)) {
       r.dia = "";
     }
-    renderTable("t-rotina","rotina");
+    renderAllForKey("rotina");
     if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
     return;
   }
@@ -5304,6 +5306,8 @@ function openTarefaModal(idx) {
   document.getElementById('tarefa-f-criadoem').value = t.criadoEm || new Date().toISOString().slice(0,10);
   document.getElementById('tarefa-f-prazo').value    = t.prazo || '';
   document.getElementById('tarefa-modal-status').textContent = '';
+  // "Apagar" só faz sentido numa tarefa que já existe
+  document.getElementById('tarefa-modal-del').style.display = nova ? 'none' : '';
   _updateTarefaPreview();
 
   document.getElementById('tarefa-modal-bg').style.display = 'block';
@@ -5313,6 +5317,19 @@ function openTarefaModal(idx) {
 function closeTarefaModal() {
   document.getElementById('tarefa-modal-bg').style.display = 'none';
   _tarefaModalIdx = null;
+}
+// Apagar a tarefa aberta. É a única forma de eliminar uma tarefa desde que a
+// tabela completa saiu — por isso pede confirmação.
+function deleteTarefaFromModal() {
+  if (_tarefaModalIdx === null) return;
+  const t = state.tarefas[_tarefaModalIdx];
+  if (!t) return;
+  if (!confirm('Apagar a tarefa "'+(t.titulo||'(sem título)')+'"?\n\nEsta acção não pode ser desfeita.')) return;
+  state.tarefas.splice(_tarefaModalIdx, 1);
+  saveState();
+  renderAllForKey('tarefas');
+  closeTarefaModal();
+  showBanner('Tarefa apagada', 'success');
 }
 
 function saveTarefaModal() {
@@ -5435,6 +5452,7 @@ function openRotinaModal(idx) {
               ['', ...getDynamicOptions('comerciaisAndCoord')], r.responsavel || '', '— sem responsável —');
   _fillSelect(document.getElementById('rotina-f-unidade'), ['Geral', ...UNIDADES], r.unidade || 'Geral');
   document.getElementById('rotina-modal-status').textContent = '';
+  document.getElementById('rotina-modal-del').style.display = nova ? 'none' : '';
   _updateRotinaPreview();
 
   document.getElementById('rotina-modal-bg').style.display = 'block';
@@ -5443,6 +5461,18 @@ function openRotinaModal(idx) {
 function closeRotinaModal() {
   document.getElementById('rotina-modal-bg').style.display = 'none';
   _rotinaModalIdx = null;
+}
+function deleteRotinaFromModal() {
+  if (_rotinaModalIdx === null) return;
+  const r = state.rotina[_rotinaModalIdx];
+  if (!r) return;
+  if (!confirm('Apagar a rotina "'+(r.tarefa||'(sem nome)')+'"?\n\nEsta acção não pode ser desfeita.')) return;
+  state.rotina.splice(_rotinaModalIdx, 1);
+  saveState();
+  renderAllForKey('rotina');
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+  closeRotinaModal();
+  showBanner('Rotina apagada', 'success');
 }
 function saveRotinaModal() {
   const st    = document.getElementById('rotina-modal-status');
@@ -5482,7 +5512,41 @@ document.addEventListener('keydown', e => {
 function renderTarefasPanel() {
   renderKanban();                       // já chama renderTarefasAlert()
   renderRotinaAlert();
-  renderTable("t-rotina","rotina");
+  renderRotinaKanban();
+}
+
+// Quadro da Rotina — mesmo desenho do kanban das tarefas, mas as colunas são
+// as frequências (a rotina não tem estado) e os cartões abrem o modal.
+function renderRotinaKanban() {
+  const cont = document.getElementById("rotina-kanban");
+  if (!cont) return;
+  cont.innerHTML = FREQUENCIAS.map(freq => {
+    const cor = FREQ_COR[freq] || '#6B7B8D';
+    const linhas = (state.rotina || [])
+      .map((r, i) => ({ r, i }))
+      .filter(x => (x.r.frequencia || '') === freq);
+
+    const cards = linhas.map(({ r, i }) => {
+      // Sem dia definido, uma rotina não-diária nunca avisa — sinalizar.
+      const semDia = freq !== 'Diária' && !r.dia;
+      const meta   = [r.responsavel, r.unidade && r.unidade !== 'Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
+      return '<div class="task-card'+(semDia?' overdue':'')+'" style="border-left-color:'+(semDia?'var(--red)':cor)+'"'
+        + ' onclick="openRotinaModal('+i+')" title="Clica para abrir a rotina">'
+        + '<div class="t-title">'+escapeHtml(r.tarefa || '(sem nome)')+'</div>'
+        + (r.descricao ? '<div style="font-size:11px;color:var(--grey);margin-bottom:4px">'
+            + escapeHtml(String(r.descricao).slice(0,80)) + (String(r.descricao).length>80?'...':'') + '</div>' : '')
+        + '<div class="t-meta">'
+          + '<span'+(semDia?'':' style="color:'+cor+'"')+'>'+escapeHtml(semDia ? '⚠ sem dia' : rotinaQuandoLabel(r))+'</span>'
+          + '<span>'+escapeHtml(meta)+'</span>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+
+    return '<div class="kanban-col">'
+      + '<h4 style="color:'+cor+'">'+escapeHtml(freq)+'<span class="n">'+linhas.length+'</span></h4>'
+      + cards
+      + '</div>';
+  }).join('');
 }
 
 // Avisos de rotina — mesma regra de 1 dia de pré-aviso da Dashboard,
@@ -5532,10 +5596,6 @@ function renderKanban() {
         '<span>'+(t.prazo?fmtDate(t.prazo):"")+'</span></div></div>';
     }).join("");
 
-    // Botão "+ Nova" na coluna "A fazer" — mesma porta de entrada da Dashboard
-    const addCard = status === "A fazer"
-      ? '<button class="task-add-card" onclick="openTarefaModal()">+ Nova tarefa</button>'
-      : '';
 
     const statusEsc = escapeHtml(status).replace(/'/g,"\\'");
     const pagination = totalPages > 1
@@ -5548,7 +5608,7 @@ function renderKanban() {
 
     return '<div class="kanban-col" data-status="'+status+'">'+
       '<h4>'+status+'<span class="n">'+total+'</span></h4>'+
-      addCard + cards + pagination + '</div>';
+      cards + pagination + '</div>';
   }).join("");
 }
 
@@ -5603,12 +5663,12 @@ function renderAllForKey(schemaKey) {
     cancelamentos:"t-cancelamentos", socios:"t-socios",
     reunioesD:"t-reunioesD", reunioesS:"t-reunioesS", reunioesM:"t-reunioesM",
     reunioesC:"t-reunioesC", reunioesDir:"t-reunioesDir",
-    rotina:"t-rotina", equipa:"t-equipa", metas:"t-metas",
+    equipa:"t-equipa", metas:"t-metas",
     objetivos:"t-objetivos", vendasExtras:"t-vendas-extras",
   };
   if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
   else if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
-  if (schemaKey==="rotina") renderRotinaAlert();
+  if (schemaKey==="rotina") { renderRotinaAlert(); renderRotinaKanban(); }
   if (schemaKey==="tarefas") {
     renderKanban();
   }
