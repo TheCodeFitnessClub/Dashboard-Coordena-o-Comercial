@@ -432,6 +432,9 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .notif-when{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;padding-top:2px}
 .notif.is-late{background:var(--red-l);border-color:rgba(248,113,113,.35)}
 .notif.is-doing{border-left:3px solid var(--blue)}
+/* Botão "+ Nova tarefa" no topo da coluna "A fazer" do kanban */
+.task-add-card{width:100%;background:transparent;border:1.5px dashed var(--line);border-radius:var(--radius-sm);padding:9px;margin-bottom:8px;font-size:11.5px;font-weight:700;color:var(--grey);cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
+.task-add-card:hover{border-color:var(--orange);color:var(--orange)}
 /* Cartão de notificação estático (pré-visualização) — sem afordância de clique */
 .notif.is-static{cursor:default}
 .notif.is-static:hover{border-color:var(--line);box-shadow:none;transform:none}
@@ -906,8 +909,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     </h2>
     <div id="tarefas-alert-zone"></div>
     <div class="kanban" id="kanban"></div>
-    <h2 class="section">Tabela completa</h2>
-    <div id="t-tarefas"></div>
   </div>
 
   <!-- Rotina -->
@@ -1086,17 +1087,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       <div class="tarefa-field">
         <label for="tarefa-f-prazo">Prazo</label>
         <input type="date" id="tarefa-f-prazo" onchange="_updateTarefaPreview()">
-      </div>
-    </div>
-
-    <div class="tarefa-grid2">
-      <div class="tarefa-field">
-        <label for="tarefa-f-responsavel">Responsável</label>
-        <select id="tarefa-f-responsavel" onchange="_updateTarefaPreview()"></select>
-      </div>
-      <div class="tarefa-field">
-        <label for="tarefa-f-unidade">Unidade</label>
-        <select id="tarefa-f-unidade" onchange="_updateTarefaPreview()"></select>
       </div>
     </div>
 
@@ -1510,6 +1500,9 @@ const SCHEMA = {
     { key:"tarefa",     label:"Tarefa",      type:"text",     w:240 },
     { key:"descricao",  label:"Descrição",   type:"textarea", w:280 },
     { key:"frequencia", label:"Frequência",  type:"select", options:["Diária","Semanal","Mensal","Pontual"], w:120 },
+    // As opções dependem da frequência da própria linha: dia da semana se
+    // Semanal, dia do mês se Mensal. Diária/Pontual não usam este campo.
+    { key:"dia",        label:"Dia",         type:"select", optionsFn: r => rotinaDiaOptions(r.frequencia), w:110 },
     { key:"responsavel",label:"Responsável", type:"select", source:"comerciaisAndCoord", w:170 },
     { key:"unidade",    label:"Unidade",     type:"select", options:["Geral",...UNIDADES], w:170 },
     { key:"notas",      label:"Notas",       type:"textarea", w:220 },
@@ -1530,8 +1523,6 @@ const SCHEMA = {
   }, fields:[
     { key:"titulo",      label:"Título",       type:"text",     w:220 },
     { key:"descricao",   label:"Descrição",    type:"textarea", w:280 },
-    { key:"responsavel", label:"Responsável",  type:"select", source:"comerciaisAndCoord", w:170 },
-    { key:"unidade",     label:"Unidade",      type:"select", options:["Geral",...UNIDADES], w:170 },
     { key:"prioridade",  label:"Prioridade",   type:"select", options:TASK_PRIO, w:110 },
     { key:"estado",      label:"Estado",       type:"select", options:TASK_STATUS, w:130 },
     { key:"prazo",       label:"Prazo",        type:"date",     w:120 },
@@ -2019,6 +2010,41 @@ function computeRetencao(r) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+// ── Rotina: dia em que a tarefa deve ser feita ────────────────────────────
+// Semanal → dia da semana; Mensal → dia do mês. Diária e Pontual não usam.
+const DIAS_SEMANA = ["2ªf","3ªf","4ªf","5ªf","6ªf"];
+function rotinaDiaOptions(freq) {
+  if (freq === "Semanal") return DIAS_SEMANA;
+  if (freq === "Mensal")  return Array.from({length:31}, (_,i) => String(i+1));
+  return [];
+}
+// A rotina é para fazer hoje?
+function rotinaEHoje(r, hoje) {
+  const f = r.frequencia || "";
+  const d = hoje || new Date();
+  const dow = d.getDay();               // 0=Dom … 6=Sáb
+  if (f === "Diária")  return dow >= 1 && dow <= 5;   // dias úteis
+  if (f === "Semanal") {
+    const i = DIAS_SEMANA.indexOf(r.dia);             // 0 → 2ªf → dow 1
+    return i >= 0 && dow === i + 1;
+  }
+  if (f === "Mensal") {
+    const dia = parseInt(r.dia, 10);
+    if (!dia) return false;
+    // Se o dia não existe neste mês (ex: 31 em fevereiro), dispara no último dia
+    const ultimo = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    return d.getDate() === Math.min(dia, ultimo);
+  }
+  return false;   // Pontual não é recorrente
+}
+// Texto curto para mostrar no cartão ("2ªf", "dia 10", "dias úteis")
+function rotinaQuandoLabel(r) {
+  const f = r.frequencia || "";
+  if (f === "Diária")  return "dias úteis";
+  if (f === "Semanal") return r.dia || "sem dia";
+  if (f === "Mensal")  return r.dia ? ("dia "+r.dia) : "sem dia";
+  return f || "—";
+}
 function getDynamicOptions(source) {
   if (source==="comerciais") return state.equipa.map(e=>e.comercial).filter(Boolean);
   if (source==="comerciaisAndCoord") return ["Coordenação",...state.equipa.map(e=>e.comercial).filter(Boolean)];
@@ -2140,7 +2166,10 @@ function renderCell(schemaKey, idx, field, row) {
     return '<td class="file-cell"><input type="file" accept=".xlsx,.xls,.pdf,.csv" onchange="uploadFile(this,\''+schemaKey+'\','+idx+',\''+field.key+'\')"></td>';
   }
   if (field.type==="select") {
-    const opts = field.source ? getDynamicOptions(field.source) : (field.options||[]);
+    // optionsFn: opções que dependem dos valores da própria linha (ex: Rotina → Dia)
+    const opts = field.optionsFn ? field.optionsFn(row)
+               : field.source   ? getDynamicOptions(field.source)
+               : (field.options||[]);
     let h = '<td><select onchange="updateCell(\''+schemaKey+'\','+idx+',\''+field.key+'\',this.value)">';
     h += '<option value=""></option>';
     opts.forEach(o => { const sel=String(o)===String(v)?"selected":""; h+='<option value="'+escapeHtml(String(o))+'" '+sel+'>'+escapeHtml(String(o))+'</option>'; });
@@ -3100,6 +3129,16 @@ function updateCell(schemaKey, idx, key, value) {
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
   else state[schemaKey][idx][key] = value;
   saveState();
+  // Rotina: as opções de "Dia" dependem da frequência. Ao mudar a frequência,
+  // limpa um dia que já não faça sentido (ex: "2ªf" ao passar para Mensal) e
+  // re-desenha a tabela para o select mostrar as opções certas.
+  if (schemaKey==="rotina" && key==="frequencia") {
+    const r = state.rotina[idx];
+    if (r.dia && !rotinaDiaOptions(r.frequencia).includes(r.dia)) r.dia = "";
+    renderTable("t-rotina","rotina");
+    if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
+    return;
+  }
   // Live-update computed cells for leads
   if (schemaKey==="leads"&&(key==="dataEntrada"||key==="dataPrimeiroContacto")) {
     const t=computeTempoResp(state[schemaKey][idx]), sla=computeSLA(state[schemaKey][idx]);
@@ -3190,10 +3229,9 @@ function openGcalTask(task) {
   const d=(task.prazo||'').replace(/-/g,'');
   const title=encodeURIComponent(task.titulo||'Tarefa');
   const lines=[
-    task.responsavel && 'Responsável: '+task.responsavel,
-    task.unidade     && 'Unidade: '+task.unidade,
-    task.prioridade  && 'Prioridade: '+task.prioridade,
-    task.descricao   && task.descricao,
+    task.prioridade && 'Prioridade: '+task.prioridade,
+    task.estado     && 'Estado: '+task.estado,
+    task.descricao  && task.descricao,
   ].filter(Boolean);
   const details=encodeURIComponent(lines.join('\n'));
   const dates=d ? d+'/'+d : '';
@@ -4278,7 +4316,7 @@ function showTodoPopup() {
       const prazo = String(t.prazo||'').slice(0,10);
       const atrasada = prazo && prazo < hoje;
       const emCurso = (t.estado||'') === 'Em curso';
-      const extra = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean).join(' · ');
+      const extra = String(t.descricao||'').slice(0,60);
       html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px">'
         + _prioBadge(t.prioridade)
         + '<span style="flex:1;color:var(--dark)">'+escapeHtml(t.titulo||'(sem título)')
@@ -4331,22 +4369,39 @@ function _todoBoardHtml() {
       + '</div>';
   }
 
+  // Rotinas para hoje aparecem como notificação; as restantes ficam na lista
+  // agrupada por frequência, mais discreta.
+  const hojeD    = new Date();
+  const rotHoje  = rotina.filter(r => rotinaEHoje(r, hojeD));
+  const rotResto = rotina.filter(r => !rotinaEHoje(r, hojeD));
+
   let rHtml = '';
-  if (!rotina.length) rHtml = '<div style="font-size:12px;color:var(--grey);padding:6px 0">Sem rotinas definidas</div>';
-  else {
-    const ordem = ['Diária','Semanal','Mensal','Pontual'];
-    const byF = {};
-    rotina.forEach(r => { const f = r.frequencia || 'Outra'; (byF[f] = byF[f] || []).push(r); });
-    const freqs = [...ordem.filter(f => byF[f]), ...Object.keys(byF).filter(f => !ordem.includes(f))];
-    freqs.forEach(f => {
-      rHtml += '<div style="font-size:10px;font-weight:700;color:var(--grey);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.5px">'+escapeHtml(f)+'</div>';
-      byF[f].forEach(r => {
-        const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
-        rHtml += '<div style="padding:3px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--dark)">'
-          + escapeHtml(r.tarefa) + (extra ? ' <span style="color:var(--grey);font-size:10.5px">· '+escapeHtml(extra)+'</span>' : '')
-          + '</div>';
+  if (!rotina.length) {
+    rHtml = '<div style="font-size:12px;color:var(--grey);padding:6px 0">Sem rotinas definidas</div>';
+  } else {
+    if (rotHoje.length) {
+      rHtml += '<div class="notif-list" style="margin-bottom:10px">'
+        + rotHoje.map(_rotinaCardHtml).join('') + '</div>';
+    }
+    if (rotResto.length) {
+      const ordem = ['Diária','Semanal','Mensal','Pontual'];
+      const byF = {};
+      rotResto.forEach(r => { const f = r.frequencia || 'Outra'; (byF[f] = byF[f] || []).push(r); });
+      const freqs = [...ordem.filter(f => byF[f]), ...Object.keys(byF).filter(f => !ordem.includes(f))];
+      freqs.forEach(f => {
+        rHtml += '<div style="font-size:10px;font-weight:700;color:var(--grey);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.5px">'+escapeHtml(f)+'</div>';
+        byF[f].forEach(r => {
+          const quando = rotinaQuandoLabel(r);
+          const extra  = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
+          rHtml += '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--dark)">'
+            + '<span style="flex:1">' + escapeHtml(r.tarefa)
+              + (extra ? ' <span style="color:var(--grey);font-size:10.5px">· '+escapeHtml(extra)+'</span>' : '')
+            + '</span>'
+            + '<span style="color:var(--grey);font-size:10.5px;font-weight:600;white-space:nowrap">'+escapeHtml(quando)+'</span>'
+            + '</div>';
+        });
       });
-    });
+    }
   }
 
   // Contador de atrasadas — destaque no cabeçalho das notificações
@@ -4365,8 +4420,10 @@ function _todoBoardHtml() {
       + '<div style="max-height:260px;overflow:auto">'+tHtml+'</div>'
     + '</div>'
     + '<div class="chart-wrap" style="height:auto;padding:14px 16px">'
-      + '<div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">🔁 Rotina</div>'
-      + '<div style="max-height:230px;overflow:auto">'+rHtml+'</div>'
+      + '<div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:9px">🔁 Rotina'
+        + (rotHoje.length ? ' <span style="color:var(--green);font-weight:700;font-size:10.5px">· '+rotHoje.length+' para hoje</span>' : '')
+      + '</div>'
+      + '<div style="max-height:260px;overflow:auto">'+rHtml+'</div>'
     + '</div>'
     + '</div>';
 }
@@ -4973,8 +5030,8 @@ function renderTarefasAlert() {
     return '<div class="lead-warning-item">'
       +'<span class="tw-prio tw-prio-'+(t.prioridade||"Média")+'">'+(t.prioridade||"Média")+'</span>'
       +'<b>'+escapeHtml(t.titulo||"(sem título)")+'</b>'
-      +([t.responsavel,t.unidade].filter(Boolean).length
-        ? '<span style="color:var(--grey);font-size:11px"> · '+escapeHtml([t.responsavel,t.unidade].filter(Boolean).join(' · '))+'</span>'
+      +(t.descricao
+        ? '<span style="color:var(--grey);font-size:11px"> · '+escapeHtml(String(t.descricao).slice(0,60))+'</span>'
         : '')
       +'<span class="days" style="margin-left:auto">'+diasLabel+'</span>'
       +'</div>';
@@ -5035,7 +5092,6 @@ function _notifCardHtml(t, idx) {
   const cor     = PRIO_COR[prio] || '#6B7B8D';
   const info    = _prazoInfo(t.prazo, t.estado);
   const emCurso = (t.estado||'') === 'Em curso';
-  const meta    = [t.responsavel, t.unidade && t.unidade!=='Geral' ? t.unidade : ''].filter(Boolean);
   const clic    = (idx === null || idx === undefined || idx < 0)
     ? '' : ' onclick="openTarefaModal('+idx+')" title="Clica para abrir a tarefa"';
   return '<div class="notif'+(info.late?' is-late':'')+(emCurso?' is-doing':'')+(clic?'':' is-static')+'"'+clic+'>'
@@ -5046,10 +5102,30 @@ function _notifCardHtml(t, idx) {
       + '<div class="notif-meta">'
         + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(prio)+'</span>'
         + (emCurso ? '<span class="notif-tag" style="color:#60A5FA">EM CURSO</span>' : '')
-        + (meta.length ? '<span>'+escapeHtml(meta.join(' · '))+'</span>' : '')
+        + (t.criadoEm ? '<span>criada a '+escapeHtml(fmtDate(t.criadoEm))+'</span>' : '')
       + '</div>'
     + '</div>'
     + '<div class="notif-when" style="color:'+info.color+'">'+escapeHtml(info.label)+'</div>'
+    + '</div>';
+}
+
+// Cartão de notificação de uma ROTINA que é para fazer hoje. Mesmas classes
+// dos cartões de tarefa, para a Dashboard ter uma linguagem visual única.
+function _rotinaCardHtml(r) {
+  const cor   = '#22C55E';   // verde: é para hoje
+  const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean);
+  return '<div class="notif is-static">'
+    + '<div class="notif-icon" style="background:'+cor+'22;color:'+cor+'">🔁</div>'
+    + '<div class="notif-body">'
+      + '<div class="notif-title">'+escapeHtml(r.tarefa||'(sem nome)')+'</div>'
+      + (r.descricao ? '<div class="notif-desc">'+escapeHtml(r.descricao)+'</div>' : '')
+      + '<div class="notif-meta">'
+        + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(r.frequencia||'Rotina')+'</span>'
+        + '<span>'+escapeHtml(rotinaQuandoLabel(r))+'</span>'
+        + (extra.length ? '<span>'+escapeHtml(extra.join(' · '))+'</span>' : '')
+      + '</div>'
+    + '</div>'
+    + '<div class="notif-when" style="color:'+cor+'">hoje</div>'
     + '</div>';
 }
 
@@ -5075,14 +5151,12 @@ function setTarefaEstado(v) { _tarefaForm.estado     = v; _renderTarefaPills(); 
 function _tarefaFormData() {
   const q = id => document.getElementById(id);
   return {
-    titulo:      q('tarefa-f-titulo').value.trim(),
-    descricao:   q('tarefa-f-descricao').value.trim(),
-    estado:      _tarefaForm.estado,
-    prioridade:  _tarefaForm.prioridade,
-    responsavel: q('tarefa-f-responsavel').value,
-    unidade:     q('tarefa-f-unidade').value,
-    criadoEm:    q('tarefa-f-criadoem').value,
-    prazo:       q('tarefa-f-prazo').value,
+    titulo:     q('tarefa-f-titulo').value.trim(),
+    descricao:  q('tarefa-f-descricao').value.trim(),
+    estado:     _tarefaForm.estado,
+    prioridade: _tarefaForm.prioridade,
+    criadoEm:   q('tarefa-f-criadoem').value,
+    prazo:      q('tarefa-f-prazo').value,
   };
 }
 function _updateTarefaPreview() {
@@ -5139,9 +5213,6 @@ function openTarefaModal(idx) {
   _tarefaForm.estado     = TASK_STATUS.includes(t.estado)     ? t.estado     : 'A fazer';
   _tarefaForm.prioridade = TASK_PRIO.includes(t.prioridade)   ? t.prioridade : 'Média';
   _renderTarefaPills();
-  _fillSelect(document.getElementById('tarefa-f-responsavel'),
-              ['', ...getDynamicOptions('comerciaisAndCoord')], t.responsavel || '', '— sem responsável —');
-  _fillSelect(document.getElementById('tarefa-f-unidade'),     ['Geral', ...UNIDADES], t.unidade || 'Geral');
   document.getElementById('tarefa-f-criadoem').value = t.criadoEm || new Date().toISOString().slice(0,10);
   document.getElementById('tarefa-f-prazo').value    = t.prazo || '';
   document.getElementById('tarefa-modal-status').textContent = '';
@@ -5186,9 +5257,8 @@ function renderKanban() {
   renderTarefasAlert();
   const cont=document.getElementById("kanban"); if(!cont) return;
   cont.innerHTML=TASK_STATUS.map(status=>{
+    // Sem filtro de clube/comercial: as tarefas deixaram de ter responsável e unidade.
     let tarefas=state.tarefas.filter(t=>(t.estado||"A fazer")===status);
-    if (filters.com)  tarefas=tarefas.filter(t=>t.responsavel===filters.com);
-    if (filters.unit) tarefas=tarefas.filter(t=>t.unidade===status||t.unidade==="Geral"||!t.unidade||t.unidade===filters.unit);
 
     // Ordenar da mais recente para a mais antiga
     tarefas = tarefas.slice().sort((a,b)=>{
@@ -5206,11 +5276,19 @@ function renderKanban() {
       const overdue=overdueCls(t.prazo)&&status!=="Feita";
       // Índice real em state.tarefas — a lista aqui está filtrada e ordenada.
       const realIdx = state.tarefas.indexOf(t);
-      return '<div class="task-card prio-'+(t.prioridade||"Média")+' '+(overdue?"overdue":"")+'"'+
+      const prio = t.prioridade||"Média";
+      return '<div class="task-card prio-'+prio+' '+(overdue?"overdue":"")+'"'+
         ' onclick="openTarefaModal('+realIdx+')" title="Clica para abrir a tarefa">'+
         '<div class="t-title">'+escapeHtml(t.titulo||"(sem título)")+'</div>'+
-        (t.descricao?'<div style="font-size:11px;color:var(--grey);margin-bottom:4px">'+escapeHtml(t.descricao.slice(0,80))+(t.descricao.length>80?"...":"")+'</div>':"")+'<div class="t-meta"><span>'+escapeHtml(t.responsavel||"")+" · "+escapeHtml(t.unidade||"")+"</span><span>"+(t.prazo?fmtDate(t.prazo):"")+"</span></div></div>";
+        (t.descricao?'<div style="font-size:11px;color:var(--grey);margin-bottom:4px">'+escapeHtml(t.descricao.slice(0,80))+(t.descricao.length>80?"...":"")+'</div>':"")+
+        '<div class="t-meta"><span style="color:'+(PRIO_COR[prio]||"#6B7B8D")+'">'+escapeHtml(prio)+'</span>'+
+        '<span>'+(t.prazo?fmtDate(t.prazo):"")+'</span></div></div>';
     }).join("");
+
+    // Botão "+ Nova" na coluna "A fazer" — mesma porta de entrada da Dashboard
+    const addCard = status === "A fazer"
+      ? '<button class="task-add-card" onclick="openTarefaModal()">+ Nova tarefa</button>'
+      : '';
 
     const statusEsc = escapeHtml(status).replace(/'/g,"\\'");
     const pagination = totalPages > 1
@@ -5223,7 +5301,7 @@ function renderKanban() {
 
     return '<div class="kanban-col" data-status="'+status+'">'+
       '<h4>'+status+'<span class="n">'+total+'</span></h4>'+
-      cards + pagination + '</div>';
+      addCard + cards + pagination + '</div>';
   }).join("");
 }
 
@@ -5253,7 +5331,7 @@ function renderSubPanel(group, subtab) {
     renderLeadsPanel();
   }
   if (group==="tarefas") {
-    if (subtab==="tarefas-lista") { renderKanban(); renderTable("t-tarefas","tarefas"); }
+    if (subtab==="tarefas-lista") renderKanban();
     if (subtab==="rotina")        renderTable("t-rotina","rotina");
   }
   if (group==="reunioes") {
@@ -5281,7 +5359,7 @@ function renderAllForKey(schemaKey) {
     cancelamentos:"t-cancelamentos", socios:"t-socios",
     reunioesD:"t-reunioesD", reunioesS:"t-reunioesS", reunioesM:"t-reunioesM",
     reunioesC:"t-reunioesC", reunioesDir:"t-reunioesDir",
-    tarefas:"t-tarefas", rotina:"t-rotina", equipa:"t-equipa", metas:"t-metas",
+    rotina:"t-rotina", equipa:"t-equipa", metas:"t-metas",
     objetivos:"t-objetivos", vendasExtras:"t-vendas-extras",
   };
   if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
