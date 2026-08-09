@@ -2108,16 +2108,15 @@ function rotinaProximaData(r, hoje) {
 }
 
 // A rotina deve aparecer como notificação hoje?
-// Regra: aparece na VÉSPERA do dia em que tem de estar concluída.
-// Excepção: "Diária" não tem véspera útil (é todos os dias) — aparece no próprio dia.
+// Pré-aviso de um dia: aparece na véspera e mantém-se no próprio dia, para não
+// desaparecer justamente no dia em que tem de ser feita. Vale para TODAS as
+// frequências, incluindo a Diária (que ao domingo avisa da segunda-feira).
 function rotinaAlertaHoje(r, hoje) {
   const d0   = _soData(hoje || new Date());
-  const venc = rotinaProximaData(r, d0);
+  const venc = rotinaProximaData(r, d0);   // nunca é anterior a hoje
   if (!venc) return false;
-  if ((r.frequencia||"") === "Diária") return venc.getTime() === d0.getTime();
-  const vespera = new Date(venc);
-  vespera.setDate(vespera.getDate() - 1);
-  return vespera.getTime() === d0.getTime();
+  const dias = Math.round((venc - d0) / 86400000);
+  return dias === 0 || dias === 1;
 }
 
 // Texto curto do "quando" ("2ªf", "dia 10", "20/08", "dias úteis")
