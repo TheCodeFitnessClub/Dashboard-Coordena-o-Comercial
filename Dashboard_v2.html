@@ -1500,9 +1500,11 @@ const SCHEMA = {
     { key:"tarefa",     label:"Tarefa",      type:"text",     w:240 },
     { key:"descricao",  label:"Descrição",   type:"textarea", w:280 },
     { key:"frequencia", label:"Frequência",  type:"select", options:["Diária","Semanal","Mensal","Pontual"], w:120 },
-    // As opções dependem da frequência da própria linha: dia da semana se
-    // Semanal, dia do mês se Mensal. Diária/Pontual não usam este campo.
-    { key:"dia",        label:"Dia",         type:"select", optionsFn: r => rotinaDiaOptions(r.frequencia), w:110 },
+    // Depende da frequência da própria linha: dia da semana se Semanal, dia do
+    // mês se Mensal, data concreta se Pontual. Diária não usa este campo.
+    { key:"dia",        label:"Dia",         type:"select", w:130,
+      typeFn:    r => (r.frequencia === "Pontual" ? "date" : "select"),
+      optionsFn: r => rotinaDiaOptions(r.frequencia) },
     { key:"responsavel",label:"Responsável", type:"select", source:"comerciaisAndCoord", w:170 },
     { key:"unidade",    label:"Unidade",     type:"select", options:["Geral",...UNIDADES], w:170 },
     { key:"notas",      label:"Notas",       type:"textarea", w:220 },
@@ -2018,31 +2020,63 @@ function rotinaDiaOptions(freq) {
   if (freq === "Mensal")  return Array.from({length:31}, (_,i) => String(i+1));
   return [];
 }
-// A rotina é para fazer hoje?
-function rotinaEHoje(r, hoje) {
-  const f = r.frequencia || "";
-  const d = hoje || new Date();
-  const dow = d.getDay();               // 0=Dom … 6=Sáb
-  if (f === "Diária")  return dow >= 1 && dow <= 5;   // dias úteis
+// Só data (sem horas), para comparações seguras entre dias
+function _soData(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+
+// Próxima data em que a rotina tem de estar CONCLUÍDA (Date) ou null.
+function rotinaProximaData(r, hoje) {
+  const d0 = _soData(hoje || new Date());
+  const f  = r.frequencia || "";
+  if (f === "Diária") {
+    // Dias úteis: hoje, ou a próxima segunda se calhar ao fim-de-semana
+    const d = new Date(d0);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate()+1);
+    return d;
+  }
   if (f === "Semanal") {
-    const i = DIAS_SEMANA.indexOf(r.dia);             // 0 → 2ªf → dow 1
-    return i >= 0 && dow === i + 1;
+    const i = DIAS_SEMANA.indexOf(r.dia);        // 0 → 2ªf → getDay() 1
+    if (i < 0) return null;
+    const d = new Date(d0);
+    d.setDate(d.getDate() + ((i + 1 - d.getDay() + 7) % 7));
+    return d;
   }
   if (f === "Mensal") {
     const dia = parseInt(r.dia, 10);
-    if (!dia) return false;
-    // Se o dia não existe neste mês (ex: 31 em fevereiro), dispara no último dia
-    const ultimo = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
-    return d.getDate() === Math.min(dia, ultimo);
+    if (!dia) return null;
+    // Se o dia não existe no mês (ex: 31 em fevereiro), cai no último dia
+    const noMes = (y,m) => new Date(y, m, Math.min(dia, new Date(y, m+1, 0).getDate()));
+    let d = noMes(d0.getFullYear(), d0.getMonth());
+    if (d < d0) d = noMes(d0.getFullYear(), d0.getMonth()+1);
+    return d;
   }
-  return false;   // Pontual não é recorrente
+  if (f === "Pontual") {
+    if (!r.dia) return null;
+    const d = new Date(String(r.dia) + "T00:00:00");
+    return isNaN(d) ? null : d;
+  }
+  return null;
 }
-// Texto curto para mostrar no cartão ("2ªf", "dia 10", "dias úteis")
+
+// A rotina deve aparecer como notificação hoje?
+// Regra: aparece na VÉSPERA do dia em que tem de estar concluída.
+// Excepção: "Diária" não tem véspera útil (é todos os dias) — aparece no próprio dia.
+function rotinaAlertaHoje(r, hoje) {
+  const d0   = _soData(hoje || new Date());
+  const venc = rotinaProximaData(r, d0);
+  if (!venc) return false;
+  if ((r.frequencia||"") === "Diária") return venc.getTime() === d0.getTime();
+  const vespera = new Date(venc);
+  vespera.setDate(vespera.getDate() - 1);
+  return vespera.getTime() === d0.getTime();
+}
+
+// Texto curto do "quando" ("2ªf", "dia 10", "20/08", "dias úteis")
 function rotinaQuandoLabel(r) {
   const f = r.frequencia || "";
   if (f === "Diária")  return "dias úteis";
   if (f === "Semanal") return r.dia || "sem dia";
   if (f === "Mensal")  return r.dia ? ("dia "+r.dia) : "sem dia";
+  if (f === "Pontual") return r.dia ? fmtDate(r.dia) : "sem data";
   return f || "—";
 }
 function getDynamicOptions(source) {
@@ -2108,6 +2142,9 @@ function clsCellInverse(v,std,min){ if(!v) return ""; return v<=std?"cell-good":
 
 // ── Cell rendering ─────────────────────────────────────────
 function renderCell(schemaKey, idx, field, row) {
+  // typeFn: o tipo do campo depende da própria linha (ex: Rotina → "Dia" é
+  // uma data quando a frequência é Pontual e uma lista nos restantes casos).
+  if (field.typeFn) field = Object.assign({}, field, { type: field.typeFn(row) });
   const v   = row[field.key] ?? "";
   const cId = schemaKey+"-"+idx+"-"+field.key;
   if (field.type==="resumo") {
@@ -3134,7 +3171,12 @@ function updateCell(schemaKey, idx, key, value) {
   // re-desenha a tabela para o select mostrar as opções certas.
   if (schemaKey==="rotina" && key==="frequencia") {
     const r = state.rotina[idx];
-    if (r.dia && !rotinaDiaOptions(r.frequencia).includes(r.dia)) r.dia = "";
+    if (r.frequencia === "Pontual") {
+      // Pontual guarda uma data ISO; um "2ªf" ou "10" que lá estivesse não serve
+      if (r.dia && !/^\d{4}-\d{2}-\d{2}$/.test(String(r.dia))) r.dia = "";
+    } else if (r.dia && !rotinaDiaOptions(r.frequencia).includes(r.dia)) {
+      r.dia = "";
+    }
     renderTable("t-rotina","rotina");
     if (document.getElementById("panel-dashboard").classList.contains("active")) renderDashboard();
     return;
@@ -4369,47 +4411,18 @@ function _todoBoardHtml() {
       + '</div>';
   }
 
-  // Rotinas para hoje aparecem como notificação; as restantes ficam na lista
-  // agrupada por frequência, mais discreta.
-  const hojeD    = new Date();
-  const rotHoje  = rotina.filter(r => rotinaEHoje(r, hojeD));
-  const rotResto = rotina.filter(r => !rotinaEHoje(r, hojeD));
-
-  let rHtml = '';
-  if (!rotina.length) {
-    rHtml = '<div style="font-size:12px;color:var(--grey);padding:6px 0">Sem rotinas definidas</div>';
-  } else {
-    if (rotHoje.length) {
-      rHtml += '<div class="notif-list" style="margin-bottom:10px">'
-        + rotHoje.map(_rotinaCardHtml).join('') + '</div>';
-    }
-    if (rotResto.length) {
-      const ordem = ['Diária','Semanal','Mensal','Pontual'];
-      const byF = {};
-      rotResto.forEach(r => { const f = r.frequencia || 'Outra'; (byF[f] = byF[f] || []).push(r); });
-      const freqs = [...ordem.filter(f => byF[f]), ...Object.keys(byF).filter(f => !ordem.includes(f))];
-      freqs.forEach(f => {
-        rHtml += '<div style="font-size:10px;font-weight:700;color:var(--grey);margin:6px 0 2px;text-transform:uppercase;letter-spacing:.5px">'+escapeHtml(f)+'</div>';
-        byF[f].forEach(r => {
-          const quando = rotinaQuandoLabel(r);
-          const extra  = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean).join(' · ');
-          rHtml += '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--dark)">'
-            + '<span style="flex:1">' + escapeHtml(r.tarefa)
-              + (extra ? ' <span style="color:var(--grey);font-size:10.5px">· '+escapeHtml(extra)+'</span>' : '')
-            + '</span>'
-            + '<span style="color:var(--grey);font-size:10.5px;font-weight:600;white-space:nowrap">'+escapeHtml(quando)+'</span>'
-            + '</div>';
-        });
-      });
-    }
-  }
+  // Rotinas: só as que têm de estar concluídas AMANHÃ (véspera). As diárias
+  // aparecem no próprio dia, porque não têm véspera útil.
+  const rotAviso = rotina.filter(r => rotinaAlertaHoje(r));
+  const rHtml = rotAviso.length
+    ? '<div class="notif-list">' + rotAviso.map(_rotinaCardHtml).join('') + '</div>'
+    : '';
 
   // Contador de atrasadas — destaque no cabeçalho das notificações
   const nAtrasadas = tarefas.filter(t => _prazoInfo(t.prazo, t.estado).late).length;
 
   return '<div class="dash-section-label">O que há para fazer</div>'
-    + '<div class="grid c2" style="gap:14px;margin-bottom:14px">'
-    + '<div class="chart-wrap" style="height:auto;padding:14px 16px">'
+    + '<div class="chart-wrap" style="height:auto;padding:14px 16px;margin-bottom:14px">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px">'
         + '<div style="font-size:12px;font-weight:700;color:var(--orange)">✓ Tarefas '
           + '<span style="color:var(--grey);font-weight:400">('+tarefas.length+')</span>'
@@ -4417,14 +4430,14 @@ function _todoBoardHtml() {
         + '</div>'
         + '<button onclick="openTarefaModal()" style="padding:3px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:10.5px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:700;color:var(--dark)">+ Nova</button>'
       + '</div>'
-      + '<div style="max-height:260px;overflow:auto">'+tHtml+'</div>'
-    + '</div>'
-    + '<div class="chart-wrap" style="height:auto;padding:14px 16px">'
-      + '<div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:9px">🔁 Rotina'
-        + (rotHoje.length ? ' <span style="color:var(--green);font-weight:700;font-size:10.5px">· '+rotHoje.length+' para hoje</span>' : '')
+      + '<div style="max-height:420px;overflow:auto">'
+        + tHtml
+        // Rotina por baixo das tarefas, no mesmo painel e com o mesmo cartão
+        + (rHtml
+            ? '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 7px">'
+              + '🔁 Rotina <span style="font-weight:400">('+rotAviso.length+')</span></div>' + rHtml
+            : '')
       + '</div>'
-      + '<div style="max-height:260px;overflow:auto">'+rHtml+'</div>'
-    + '</div>'
     + '</div>';
 }
 
@@ -5087,46 +5100,68 @@ const ESTADO_COR = { 'A fazer':'#6B7B8D', 'Em curso':'#60A5FA', 'Feita':'#22C55E
 // Cartão de notificação de uma tarefa. Usado na aba Dashboard E na
 // pré-visualização do formulário — é o que garante que são iguais.
 // idx = índice em state.tarefas (null → cartão estático, sem clique).
+// Desenho base do cartão. Tarefas e rotinas passam ambas por aqui — é o que
+// garante que têm exactamente o mesmo aspecto.
+//   cor    → hex (leva sufixo "22" para o fundo do ícone)
+//   tags   → [{ label, color? }]; sem color sai como texto simples
+//   info   → { label, color, late } (normalmente vindo de _prazoInfo)
+function _notifBaseHtml(o) {
+  const clic = o.onclick ? ' onclick="'+o.onclick+'" title="'+(o.title||'')+'"' : '';
+  return '<div class="notif'+(o.info.late?' is-late':'')+(o.extraClass?' '+o.extraClass:'')+(clic?'':' is-static')+'"'+clic+'>'
+    + '<div class="notif-icon" style="background:'+o.cor+'22;color:'+o.cor+'">'+o.icone+'</div>'
+    + '<div class="notif-body">'
+      + '<div class="notif-title">'+escapeHtml(o.titulo)+'</div>'
+      + (o.descricao ? '<div class="notif-desc">'+escapeHtml(o.descricao)+'</div>' : '')
+      + '<div class="notif-meta">'
+        + (o.tags||[]).map(t => t.color
+            ? '<span class="notif-tag" style="color:'+t.color+'">'+escapeHtml(t.label)+'</span>'
+            : '<span>'+escapeHtml(t.label)+'</span>').join('')
+      + '</div>'
+    + '</div>'
+    + '<div class="notif-when" style="color:'+o.info.color+'">'+escapeHtml(o.info.label)+'</div>'
+    + '</div>';
+}
+
 function _notifCardHtml(t, idx) {
   const prio    = t.prioridade || 'Média';
   const cor     = PRIO_COR[prio] || '#6B7B8D';
   const info    = _prazoInfo(t.prazo, t.estado);
   const emCurso = (t.estado||'') === 'Em curso';
-  const clic    = (idx === null || idx === undefined || idx < 0)
-    ? '' : ' onclick="openTarefaModal('+idx+')" title="Clica para abrir a tarefa"';
-  return '<div class="notif'+(info.late?' is-late':'')+(emCurso?' is-doing':'')+(clic?'':' is-static')+'"'+clic+'>'
-    + '<div class="notif-icon" style="background:'+cor+'22;color:'+cor+'">'+(info.late?'!':'✓')+'</div>'
-    + '<div class="notif-body">'
-      + '<div class="notif-title">'+escapeHtml(t.titulo||'(sem título)')+'</div>'
-      + (t.descricao ? '<div class="notif-desc">'+escapeHtml(t.descricao)+'</div>' : '')
-      + '<div class="notif-meta">'
-        + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(prio)+'</span>'
-        + (emCurso ? '<span class="notif-tag" style="color:#60A5FA">EM CURSO</span>' : '')
-        + (t.criadoEm ? '<span>criada a '+escapeHtml(fmtDate(t.criadoEm))+'</span>' : '')
-      + '</div>'
-    + '</div>'
-    + '<div class="notif-when" style="color:'+info.color+'">'+escapeHtml(info.label)+'</div>'
-    + '</div>';
+  const tags    = [{ label: prio, color: cor }];
+  if (emCurso)    tags.push({ label: 'EM CURSO', color: '#60A5FA' });
+  if (t.criadoEm) tags.push({ label: 'criada a ' + fmtDate(t.criadoEm) });
+  return _notifBaseHtml({
+    cor, info, tags,
+    icone:      info.late ? '!' : '✓',
+    titulo:     t.titulo || '(sem título)',
+    descricao:  t.descricao,
+    extraClass: emCurso ? 'is-doing' : '',
+    onclick:    (idx === null || idx === undefined || idx < 0) ? '' : 'openTarefaModal('+idx+')',
+    title:      'Clica para abrir a tarefa',
+  });
 }
 
 // Cartão de notificação de uma ROTINA que é para fazer hoje. Mesmas classes
 // dos cartões de tarefa, para a Dashboard ter uma linguagem visual única.
+// Cartão de uma ROTINA que aparece hoje. Mesmo desenho das tarefas: passa pelo
+// mesmo _notifBaseHtml e o "quando" sai do mesmo _prazoInfo, por isso as cores
+// e os rótulos seguem exactamente a mesma convenção.
 function _rotinaCardHtml(r) {
-  const cor   = '#22C55E';   // verde: é para hoje
+  const venc  = rotinaProximaData(r);
+  const vencI = venc ? venc.getFullYear()+'-'+String(venc.getMonth()+1).padStart(2,'0')+'-'+String(venc.getDate()).padStart(2,'0') : '';
+  const info  = _prazoInfo(vencI, '');
+  // Hex equivalente à cor devolvida por _prazoInfo (o ícone precisa de hex)
+  const MAPA  = { 'var(--red)':'#F87171', 'var(--orange)':'#F97316', 'var(--yellow)':'#FCD34D', 'var(--green)':'#22C55E', 'var(--grey)':'#6B7B8D' };
+  const cor   = MAPA[info.color] || '#6B7B8D';
   const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean);
-  return '<div class="notif is-static">'
-    + '<div class="notif-icon" style="background:'+cor+'22;color:'+cor+'">🔁</div>'
-    + '<div class="notif-body">'
-      + '<div class="notif-title">'+escapeHtml(r.tarefa||'(sem nome)')+'</div>'
-      + (r.descricao ? '<div class="notif-desc">'+escapeHtml(r.descricao)+'</div>' : '')
-      + '<div class="notif-meta">'
-        + '<span class="notif-tag" style="color:'+cor+'">'+escapeHtml(r.frequencia||'Rotina')+'</span>'
-        + '<span>'+escapeHtml(rotinaQuandoLabel(r))+'</span>'
-        + (extra.length ? '<span>'+escapeHtml(extra.join(' · '))+'</span>' : '')
-      + '</div>'
-    + '</div>'
-    + '<div class="notif-when" style="color:'+cor+'">hoje</div>'
-    + '</div>';
+  const tags  = [{ label: r.frequencia || 'Rotina', color: cor }, { label: rotinaQuandoLabel(r) }];
+  if (extra.length) tags.push({ label: extra.join(' · ') });
+  return _notifBaseHtml({
+    cor, info, tags,
+    icone:     info.late ? '!' : '🔁',
+    titulo:    r.tarefa || '(sem nome)',
+    descricao: r.descricao,
+  });
 }
 
 // Pills de prioridade/estado — visualmente iguais às etiquetas das notificações
