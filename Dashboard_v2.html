@@ -895,31 +895,21 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
      TAREFAS
 ══════════════════════════════════════════ -->
 <section class="panel" id="panel-tarefas">
-  <nav class="sub-tabs" data-group="tarefas">
-    <button class="active" data-subtab="tarefas-lista">Tarefas</button>
-    <button data-subtab="rotina">Rotina</button>
-  </nav>
+  <h2 class="section">O que há para fazer
+    <span class="actions">
+      <button onclick="openTarefaModal()" class="primary">+ Nova tarefa</button>
+      <button onclick="openRotinaModal()" class="primary">+ Nova rotina</button>
+    </span>
+  </h2>
+  <!-- Avisos: tarefas primeiro, rotina (1 dia de pré-aviso) logo por baixo -->
+  <div id="tarefas-alert-zone"></div>
+  <div id="rotina-alert-zone"></div>
 
-  <!-- Tarefas -->
-  <div class="sub-panel active" data-subpanel="tarefas-lista">
-    <h2 class="section">Tarefas — kanban
-      <span class="actions">
-        <button onclick="openTarefaModal()" class="primary">+ Nova tarefa</button>
-      </span>
-    </h2>
-    <div id="tarefas-alert-zone"></div>
-    <div class="kanban" id="kanban"></div>
-  </div>
+  <h2 class="section">Tarefas — kanban</h2>
+  <div class="kanban" id="kanban"></div>
 
-  <!-- Rotina -->
-  <div class="sub-panel" data-subpanel="rotina">
-    <h2 class="section">Rotina
-      <span class="actions">
-        <button onclick="addRow('rotina')" class="primary">+ Adicionar tarefa</button>
-      </span>
-    </h2>
-    <div id="t-rotina"></div>
-  </div>
+  <h2 class="section">Rotina</h2>
+  <div id="t-rotina"></div>
 </section>
 
 <!-- ══════════════════════════════════════════
@@ -1095,6 +1085,64 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       <div style="display:flex;gap:8px">
         <button onclick="closeTarefaModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
         <button onclick="saveTarefaModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal rotina (criar / editar) — desenho idêntico ao da tarefa, campos próprios -->
+<div class="log-modal-bg" id="rotina-modal-bg" onclick="if(event.target===this)closeRotinaModal()">
+  <div class="tarefa-modal">
+    <div class="tarefa-modal-head">
+      <div class="notif-icon" id="rotina-modal-icon">🔁</div>
+      <div>
+        <div class="tarefa-modal-title" id="rotina-modal-title">Nova rotina</div>
+        <div class="tarefa-modal-meta" id="rotina-modal-meta"></div>
+      </div>
+      <button class="tarefa-modal-x" onclick="closeRotinaModal()">×</button>
+    </div>
+
+    <div class="tarefa-prev-lbl">Como vai aparecer na Dashboard</div>
+    <div class="tarefa-prev" id="rotina-preview"></div>
+
+    <div class="tarefa-field">
+      <label for="rotina-f-tarefa">Tarefa</label>
+      <input type="text" id="rotina-f-tarefa" placeholder="O que se repete?" autocomplete="off" oninput="_updateRotinaPreview()">
+    </div>
+
+    <div class="tarefa-field">
+      <label for="rotina-f-descricao">Descrição</label>
+      <textarea id="rotina-f-descricao" rows="3" placeholder="Contexto, passos, links…" oninput="_updateRotinaPreview()"></textarea>
+    </div>
+
+    <div class="tarefa-field">
+      <label>Frequência</label>
+      <div class="pill-row" id="rotina-pills-freq"></div>
+    </div>
+
+    <div class="tarefa-field" id="rotina-dia-wrap"></div>
+
+    <div class="tarefa-grid2">
+      <div class="tarefa-field">
+        <label for="rotina-f-responsavel">Responsável</label>
+        <select id="rotina-f-responsavel" onchange="_updateRotinaPreview()"></select>
+      </div>
+      <div class="tarefa-field">
+        <label for="rotina-f-unidade">Unidade</label>
+        <select id="rotina-f-unidade" onchange="_updateRotinaPreview()"></select>
+      </div>
+    </div>
+
+    <div class="tarefa-field">
+      <label for="rotina-f-notas">Notas</label>
+      <textarea id="rotina-f-notas" rows="2" placeholder="Notas adicionais…"></textarea>
+    </div>
+
+    <div class="tarefa-modal-foot">
+      <span class="log-saved" id="rotina-modal-status"></span>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeRotinaModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
+        <button onclick="saveRotinaModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
       </div>
     </div>
   </div>
@@ -5096,6 +5144,9 @@ let _tarefaForm = { prioridade:'Média', estado:'A fazer' };
 // "var(--red)22" não seria cor válida. Estas cores não mudam entre temas.
 const PRIO_COR   = { 'Alta':'#F87171', 'Média':'#FCD34D', 'Baixa':'#60A5FA' };
 const ESTADO_COR = { 'A fazer':'#6B7B8D', 'Em curso':'#60A5FA', 'Feita':'#22C55E' };
+// Na rotina, a frequência ocupa o lugar da prioridade (cor do ícone e da 1ª etiqueta)
+const FREQ_COR   = { 'Diária':'#60A5FA', 'Semanal':'#A855F7', 'Mensal':'#F97316', 'Pontual':'#22C55E' };
+const FREQUENCIAS = ['Diária','Semanal','Mensal','Pontual'];
 
 // Cartão de notificação de uma tarefa. Usado na aba Dashboard E na
 // pré-visualização do formulário — é o que garante que são iguais.
@@ -5147,14 +5198,16 @@ function _notifCardHtml(t, idx) {
 // mesmo _notifBaseHtml e o "quando" sai do mesmo _prazoInfo, por isso as cores
 // e os rótulos seguem exactamente a mesma convenção.
 function _rotinaCardHtml(r) {
+  // A frequência faz aqui o papel que a prioridade faz nas tarefas: dá a cor
+  // do ícone e da primeira etiqueta. O "quando" continua a vir de _prazoInfo,
+  // por isso um "amanhã" de rotina é igual a um "amanhã" de tarefa.
   const venc  = rotinaProximaData(r);
   const vencI = venc ? venc.getFullYear()+'-'+String(venc.getMonth()+1).padStart(2,'0')+'-'+String(venc.getDate()).padStart(2,'0') : '';
   const info  = _prazoInfo(vencI, '');
-  // Hex equivalente à cor devolvida por _prazoInfo (o ícone precisa de hex)
-  const MAPA  = { 'var(--red)':'#F87171', 'var(--orange)':'#F97316', 'var(--yellow)':'#FCD34D', 'var(--green)':'#22C55E', 'var(--grey)':'#6B7B8D' };
-  const cor   = MAPA[info.color] || '#6B7B8D';
+  const freq  = r.frequencia || 'Rotina';
+  const cor   = FREQ_COR[freq] || '#6B7B8D';
   const extra = [r.responsavel, r.unidade && r.unidade!=='Geral' ? r.unidade : ''].filter(Boolean);
-  const tags  = [{ label: r.frequencia || 'Rotina', color: cor }, { label: rotinaQuandoLabel(r) }];
+  const tags  = [{ label: freq, color: cor }, { label: rotinaQuandoLabel(r) }];
   if (extra.length) tags.push({ label: extra.join(' · ') });
   return _notifBaseHtml({
     cor, info, tags,
@@ -5288,6 +5341,165 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Modal de rotina (criar / editar) ──────────────────────────────────────
+// Espelha o modal de tarefa: mesmo card, mesmas pills, mesma pré-visualização.
+// Muda só o que é próprio da rotina — frequência em vez de prioridade/estado,
+// e o campo "Dia" que se adapta à frequência escolhida.
+let _rotinaModalIdx = null;                       // null = rotina nova
+let _rotinaForm     = { frequencia: 'Semanal' };
+
+function _renderRotinaPills() {
+  const el = document.getElementById('rotina-pills-freq');
+  if (el) el.innerHTML = FREQUENCIAS.map(v =>
+    _pillHtml(v, _rotinaForm.frequencia, FREQ_COR[v] || '#6B7B8D', 'setRotinaFreq')).join('');
+}
+// O campo "Dia" muda de natureza conforme a frequência
+function _renderRotinaDiaField(valor) {
+  const wrap = document.getElementById('rotina-dia-wrap');
+  if (!wrap) return;
+  const f = _rotinaForm.frequencia;
+  if (f === 'Diária') {
+    wrap.innerHTML = '<label>Dia</label>'
+      + '<div style="font-size:11.5px;color:var(--grey);padding:4px 0">Todos os dias úteis — não é preciso escolher dia.</div>';
+    return;
+  }
+  if (f === 'Pontual') {
+    wrap.innerHTML = '<label for="rotina-f-dia">Data</label>'
+      + '<input type="date" id="rotina-f-dia" onchange="_updateRotinaPreview()" value="'+escapeHtml(valor||'')+'">';
+    return;
+  }
+  const opts = rotinaDiaOptions(f);
+  const lbl  = f === 'Semanal' ? 'Dia da semana' : 'Dia do mês';
+  wrap.innerHTML = '<label for="rotina-f-dia">'+lbl+'</label>'
+    + '<select id="rotina-f-dia" onchange="_updateRotinaPreview()">'
+    + '<option value="">— escolher —</option>'
+    + opts.map(o => '<option value="'+escapeHtml(o)+'"'+(o===valor?' selected':'')+'>'+escapeHtml(o)+'</option>').join('')
+    + '</select>';
+}
+function setRotinaFreq(v) {
+  // Um dia que já não faça sentido na nova frequência é descartado
+  const atual = _rotinaDiaValor();
+  _rotinaForm.frequencia = v;
+  const serve = (v === 'Pontual')
+    ? /^\d{4}-\d{2}-\d{2}$/.test(String(atual||''))
+    : rotinaDiaOptions(v).includes(atual);
+  _renderRotinaPills();
+  _renderRotinaDiaField(serve ? atual : '');
+  _updateRotinaPreview();
+}
+function _rotinaDiaValor() {
+  const el = document.getElementById('rotina-f-dia');
+  return el ? el.value : '';
+}
+function _rotinaFormData() {
+  const q = id => document.getElementById(id);
+  return {
+    tarefa:      q('rotina-f-tarefa').value.trim(),
+    descricao:   q('rotina-f-descricao').value.trim(),
+    frequencia:  _rotinaForm.frequencia,
+    dia:         _rotinaDiaValor(),
+    responsavel: q('rotina-f-responsavel').value,
+    unidade:     q('rotina-f-unidade').value,
+    notas:       q('rotina-f-notas').value.trim(),
+  };
+}
+function _updateRotinaPreview() {
+  const prev = document.getElementById('rotina-preview');
+  if (!prev) return;
+  const d = _rotinaFormData();
+  prev.innerHTML = _rotinaCardHtml(d);
+  const ic = document.getElementById('rotina-modal-icon');
+  if (ic) {
+    const c = FREQ_COR[d.frequencia] || '#6B7B8D';
+    ic.style.background = c + '22';
+    ic.style.color = c;
+  }
+}
+function openRotinaModal(idx) {
+  _rotinaModalIdx = (idx === undefined || idx === null || idx < 0) ? null : idx;
+  const nova = _rotinaModalIdx === null;
+  const r = nova ? {} : (state.rotina[_rotinaModalIdx] || {});
+
+  document.getElementById('rotina-modal-title').textContent = nova ? 'Nova rotina' : 'Editar rotina';
+  document.getElementById('rotina-modal-meta').textContent  = nova
+    ? 'Avisa-te um dia antes de ter de estar feita.'
+    : rotinaQuandoLabel(r);
+
+  document.getElementById('rotina-f-tarefa').value    = r.tarefa || '';
+  document.getElementById('rotina-f-descricao').value = r.descricao || '';
+  document.getElementById('rotina-f-notas').value     = r.notas || '';
+  _rotinaForm.frequencia = FREQUENCIAS.includes(r.frequencia) ? r.frequencia : 'Semanal';
+  _renderRotinaPills();
+  _renderRotinaDiaField(r.dia || '');
+  _fillSelect(document.getElementById('rotina-f-responsavel'),
+              ['', ...getDynamicOptions('comerciaisAndCoord')], r.responsavel || '', '— sem responsável —');
+  _fillSelect(document.getElementById('rotina-f-unidade'), ['Geral', ...UNIDADES], r.unidade || 'Geral');
+  document.getElementById('rotina-modal-status').textContent = '';
+  _updateRotinaPreview();
+
+  document.getElementById('rotina-modal-bg').style.display = 'block';
+  setTimeout(() => document.getElementById('rotina-f-tarefa').focus(), 50);
+}
+function closeRotinaModal() {
+  document.getElementById('rotina-modal-bg').style.display = 'none';
+  _rotinaModalIdx = null;
+}
+function saveRotinaModal() {
+  const st    = document.getElementById('rotina-modal-status');
+  const dados = _rotinaFormData();
+  if (!dados.tarefa) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'O nome da tarefa é obrigatório.';
+    document.getElementById('rotina-f-tarefa').focus();
+    return;
+  }
+  // Sem dia, uma rotina Semanal/Mensal/Pontual nunca chega a avisar
+  if (dados.frequencia !== 'Diária' && !dados.dia) {
+    st.style.color = 'var(--red)';
+    st.textContent = dados.frequencia === 'Pontual'
+      ? 'Escolhe a data — sem ela a rotina nunca avisa.'
+      : 'Escolhe o dia — sem ele a rotina nunca avisa.';
+    return;
+  }
+  const nova = _rotinaModalIdx === null;
+  if (nova) state.rotina.push(dados);
+  else      Object.assign(state.rotina[_rotinaModalIdx], dados);
+  saveState();
+  renderAllForKey('rotina');
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+  closeRotinaModal();
+  showBanner(nova ? '✓ Rotina criada' : '✓ Rotina atualizada', 'success');
+}
+// Escape fecha o modal de rotina sem guardar
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const bg = document.getElementById('rotina-modal-bg');
+    if (bg && bg.style.display === 'block') closeRotinaModal();
+  }
+});
+
+// A aba Tarefas passou a ser um painel único (Tarefas + Rotina juntas).
+function renderTarefasPanel() {
+  renderKanban();                       // já chama renderTarefasAlert()
+  renderRotinaAlert();
+  renderTable("t-rotina","rotina");
+}
+
+// Avisos de rotina — mesma regra de 1 dia de pré-aviso da Dashboard,
+// mostrados por baixo dos avisos de tarefa.
+function renderRotinaAlert() {
+  const el = document.getElementById("rotina-alert-zone");
+  if (!el) return;
+  const aviso = (state.rotina || [])
+    .filter(r => (r.tarefa||'').trim() && rotinaAlertaHoje(r));
+  if (!aviso.length) { el.innerHTML = ""; return; }
+  el.innerHTML = '<div style="margin-bottom:14px">'
+    + '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">'
+      + '🔁 Rotina <span style="font-weight:400">('+aviso.length+')</span></div>'
+    + '<div class="notif-list">' + aviso.map(_rotinaCardHtml).join('') + '</div>'
+    + '</div>';
+}
+
 function renderKanban() {
   renderTarefasAlert();
   const cont=document.getElementById("kanban"); if(!cont) return;
@@ -5365,10 +5577,7 @@ function renderSubPanel(group, subtab) {
   if (group==="closum") {
     renderLeadsPanel();
   }
-  if (group==="tarefas") {
-    if (subtab==="tarefas-lista") renderKanban();
-    if (subtab==="rotina")        renderTable("t-rotina","rotina");
-  }
+  // "tarefas" já não tem sub-abas — ver renderTarefasPanel()
   if (group==="reunioes") {
     if (subtab==="diarias")     renderTable("t-reunioesD","reunioesD");
     if (subtab==="semanais")    renderTable("t-reunioesS","reunioesS");
@@ -5399,6 +5608,7 @@ function renderAllForKey(schemaKey) {
   };
   if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
   else if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
+  if (schemaKey==="rotina") renderRotinaAlert();
   if (schemaKey==="tarefas") {
     renderKanban();
   }
@@ -5425,7 +5635,7 @@ function renderActivePanel() {
   if (tab==="dashboard")  renderDashboard();
   if (tab==="kpis")       renderActiveKpisSubPanel();
   if (tab==="closum")     renderLeadsPanel();
-  if (tab==="tarefas")    { const tb=document.querySelector("#panel-tarefas .sub-tabs button.active"); renderSubPanel("tarefas",tb?tb.dataset.subtab:"tarefas-lista"); }
+  if (tab==="tarefas")    renderTarefasPanel();
   if (tab==="reunioes")   renderActiveReunioesSubPanel();
   if (tab==="ficheiros")  renderFicheiros();
   if (tab==="socios")     renderSociosPanel();
