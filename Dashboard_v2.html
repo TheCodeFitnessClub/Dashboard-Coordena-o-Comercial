@@ -1400,6 +1400,14 @@ Chart.defaults.scale.ticks.color                  = '#546A84';
 Chart.defaults.scale.ticks.maxTicksLimit          = 6;
 
 
+// Cor do texto das legendas, lida do tema activo (--dark2 muda entre escuro e
+// claro). Só é precisa onde há generateLabels próprio — nos restantes gráficos
+// o Chart.js aplica sozinho o Chart.defaults.plugins.legend.labels.color.
+function _chartLegendColor() {
+  const v = getComputedStyle(document.body).getPropertyValue('--dark2').trim();
+  return v || Chart.defaults.plugins.legend.labels.color || '#B0BDD0';
+}
+
 if (typeof structuredClone === 'undefined') { window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj)); }
 
 // ── Constants ──────────────────────────────────────────────
@@ -4532,6 +4540,10 @@ function renderMotivosPerdidoChart() {
           // Legenda com número e percentagem de cada motivo (obedece ao período)
           generateLabels: (chart) => {
             const ds = chart.data.datasets[0] || { data: [], backgroundColor: [] };
+            // fontColor é OBRIGATÓRIO num generateLabels próprio: o Chart.js v4
+            // faz ctx.fillStyle = item.fontColor, e se vier undefined a legenda
+            // sai a preto (ilegível no tema escuro).
+            const cor = _chartLegendColor();
             return (chart.data.labels || []).map((lab, i) => {
               const v = ds.data[i] || 0;
               const pct = total ? Math.round((v/total)*100) : 0;
@@ -4539,6 +4551,7 @@ function renderMotivosPerdidoChart() {
                 text: `${lab}: ${v} (${pct}%)`,
                 fillStyle: ds.backgroundColor[i],
                 strokeStyle: ds.backgroundColor[i],
+                fontColor: cor,
                 lineWidth: 0,
                 hidden: false,
                 index: i,
