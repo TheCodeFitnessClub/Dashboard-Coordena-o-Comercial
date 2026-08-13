@@ -3305,13 +3305,28 @@ function reuniaoTemAta(row) {
 //   Realizada  → tem ata, ou foi marcada à mão
 //   Por fechar → a data já passou (ou é hoje) e continua sem ata
 //   Agendada   → data futura, ou ainda sem data
-function reuniaoEstado(row, hoje) {
+// Data local em ISO. Não usar toISOString(), que devolve a data em UTC e
+// no nosso fuso troca o dia durante a madrugada.
+function _isoLocal(d) {
+  const x = d || new Date();
+  return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
+}
+function reuniaoEstado(row, agora) {
   if (row && row.realizada) return 'Realizada';
   if (reuniaoTemAta(row))   return 'Realizada';
   const d = String((row && row.data) || '').slice(0,10);
   if (!d) return 'Agendada';
-  const hojeIso = (hoje || new Date()).toISOString().slice(0,10);
-  return d <= hojeIso ? 'Por fechar' : 'Agendada';
+  const ref     = agora || new Date();
+  const hojeIso = _isoLocal(ref);
+  if (d > hojeIso) return 'Agendada';
+  if (d < hojeIso) return 'Por fechar';
+  // É hoje: só fica "Por fechar" depois de passar a hora marcada — de manhã,
+  // uma reunião das 15h ainda está por acontecer. Sem hora definida, continua
+  // agendada até ao fim do dia.
+  const hora = String((row && row.hora) || '').slice(0,5);
+  if (!hora) return 'Agendada';
+  const agoraHM = String(ref.getHours()).padStart(2,'0') + ':' + String(ref.getMinutes()).padStart(2,'0');
+  return hora <= agoraHM ? 'Por fechar' : 'Agendada';
 }
 // Todas as reuniões das 5 listas, já com tipo e estado.
 function todasReunioes() {
@@ -3959,8 +3974,8 @@ function renderDashboard() {
     const churnCls = churnGlobal===null ? 'none' : churnGlobal<=3 ? 'good' : churnGlobal<=6 ? 'warn' : 'bad';
     const churnSub = churnSubMes ? 'período inferior a um mês' : 'média do churn mensal';
 
-    // Quadro "O que há para fazer" (Tarefas | Rotina) — por cima dos dados gerais
-    h += _todoBoardHtml();
+    // O quadro "O que há para fazer" saiu da Dashboard: tarefas e rotina vivem
+    // na aba Tarefas, reuniões na aba Reuniões.
 
     h += '<div class="dash-section-label">Dados gerais do negócio</div>';
     h += '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:4px">';
@@ -4491,60 +4506,6 @@ function showTodoPopup() {
 }
 
 // Quadro "O que há para fazer" (Tarefas | Rotina) — para a dashboard.
-function _todoBoardHtml() {
-  const tarefas = (state.tarefas || [])
-    .filter(t => (t.estado || 'A fazer') !== 'Feita' && ((t.titulo||'').trim() || (t.descricao||'').trim()))
-    .sort((a,b) => String(a.prazo||'9999').localeCompare(String(b.prazo||'9999')));
-  const rotina = (state.rotina || []).filter(r => (r.tarefa||'').trim());
-
-  // Tarefas em estilo "notificação" — mesmo cartão que o formulário pré-visualiza.
-  let tHtml = '';
-  if (!tarefas.length) {
-    tHtml = '<div style="font-size:12px;color:var(--grey);padding:14px 0;text-align:center">Sem tarefas pendentes 🎉</div>';
-  } else {
-    tHtml = '<div class="notif-list">'
-      + tarefas.map(t => _notifCardHtml(t, state.tarefas.indexOf(t))).join('')
-      + '</div>';
-  }
-
-  // Rotinas: só as que têm de estar concluídas AMANHÃ (véspera). As diárias
-  // aparecem no próprio dia, porque não têm véspera útil.
-  const rotAviso = rotina.filter(r => rotinaAlertaHoje(r));
-  const rHtml = rotAviso.length
-    ? '<div class="notif-list">' + rotAviso.map(_rotinaCardHtml).join('') + '</div>'
-    : '';
-
-  // Reuniões de hoje e de amanhã ainda por realizar — mesma janela da rotina.
-  const reuAviso = reunioesProximas();
-  const mHtml = reuAviso.length
-    ? '<div class="notif-list">' + reuAviso.map(_reuniaoCardHtml).join('') + '</div>'
-    : '';
-
-  // Sub-cabeçalho de cada bloco dentro do painel
-  const subTitulo = (txt, n) =>
-    '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 7px">'
-    + txt + ' <span style="font-weight:400">('+n+')</span></div>';
-
-  // Contador de atrasadas — destaque no cabeçalho das notificações
-  const nAtrasadas = tarefas.filter(t => _prazoInfo(t.prazo, t.estado).late).length;
-
-  return '<div class="dash-section-label">O que há para fazer</div>'
-    + '<div class="chart-wrap" style="height:auto;padding:14px 16px;margin-bottom:14px">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px">'
-        + '<div style="font-size:12px;font-weight:700;color:var(--orange)">✓ Tarefas '
-          + '<span style="color:var(--grey);font-weight:400">('+tarefas.length+')</span>'
-          + (nAtrasadas ? ' <span style="color:var(--red);font-weight:700;font-size:10.5px">· '+nAtrasadas+' atrasada'+(nAtrasadas!==1?'s':'')+'</span>' : '')
-        + '</div>'
-        + '<button onclick="openTarefaModal()" style="padding:3px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:10.5px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:700;color:var(--dark)">+ Nova</button>'
-      + '</div>'
-      + '<div style="max-height:460px;overflow:auto">'
-        + tHtml
-        // Rotina e reuniões por baixo das tarefas, no mesmo painel e com o mesmo cartão
-        + (rHtml ? subTitulo('🔁 Rotina',   rotAviso.length) + rHtml : '')
-        + (mHtml ? subTitulo('📅 Reuniões', reuAviso.length) + mHtml : '')
-      + '</div>'
-    + '</div>';
-}
 
 function renderMotivosPerdidoChart() {
   const ctx = document.getElementById('chart-motivos-perdido');
