@@ -4514,6 +4514,17 @@ function _todoBoardHtml() {
     ? '<div class="notif-list">' + rotAviso.map(_rotinaCardHtml).join('') + '</div>'
     : '';
 
+  // Reuniões de hoje e de amanhã ainda por realizar — mesma janela da rotina.
+  const reuAviso = reunioesProximas();
+  const mHtml = reuAviso.length
+    ? '<div class="notif-list">' + reuAviso.map(_reuniaoCardHtml).join('') + '</div>'
+    : '';
+
+  // Sub-cabeçalho de cada bloco dentro do painel
+  const subTitulo = (txt, n) =>
+    '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 7px">'
+    + txt + ' <span style="font-weight:400">('+n+')</span></div>';
+
   // Contador de atrasadas — destaque no cabeçalho das notificações
   const nAtrasadas = tarefas.filter(t => _prazoInfo(t.prazo, t.estado).late).length;
 
@@ -4526,13 +4537,11 @@ function _todoBoardHtml() {
         + '</div>'
         + '<button onclick="openTarefaModal()" style="padding:3px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:10.5px;background:var(--card-bg);cursor:pointer;font-family:inherit;font-weight:700;color:var(--dark)">+ Nova</button>'
       + '</div>'
-      + '<div style="max-height:420px;overflow:auto">'
+      + '<div style="max-height:460px;overflow:auto">'
         + tHtml
-        // Rotina por baixo das tarefas, no mesmo painel e com o mesmo cartão
-        + (rHtml
-            ? '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 7px">'
-              + '🔁 Rotina <span style="font-weight:400">('+rotAviso.length+')</span></div>' + rHtml
-            : '')
+        // Rotina e reuniões por baixo das tarefas, no mesmo painel e com o mesmo cartão
+        + (rHtml ? subTitulo('🔁 Rotina',   rotAviso.length) + rHtml : '')
+        + (mHtml ? subTitulo('📅 Reuniões', reuAviso.length) + mHtml : '')
       + '</div>'
     + '</div>';
 }
@@ -8026,13 +8035,12 @@ function _reuniaoCardHtml(m) {
   });
 }
 
-// Avisos: reuniões de hoje e de amanhã (mesmo pré-aviso de um dia da rotina)
-function renderReunioesAlert() {
-  const el = document.getElementById('reunioes-alert-zone');
-  if (!el) return;
-  const hoje = new Date();
-  const d0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
-  const proximas = todasReunioes()
+// Reuniões de hoje e de amanhã, ainda por realizar. Mesmo pré-aviso de um dia
+// da rotina. Usada na aba Reuniões e no quadro "O que há para fazer".
+function reunioesProximas(hoje) {
+  const base = hoje || new Date();
+  const d0 = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  return todasReunioes()
     .filter(m => {
       const d = String(m.row.data||'').slice(0,10);
       if (!d || m.estado === 'Realizada') return false;
@@ -8042,6 +8050,13 @@ function renderReunioesAlert() {
       return dias === 0 || dias === 1;
     })
     .sort((a,b) => _reuniaoQuando(a.row).localeCompare(_reuniaoQuando(b.row)));
+}
+
+// Avisos na aba Reuniões
+function renderReunioesAlert() {
+  const el = document.getElementById('reunioes-alert-zone');
+  if (!el) return;
+  const proximas = reunioesProximas();
   if (!proximas.length) { el.innerHTML = ''; return; }
   el.innerHTML = '<div style="margin-bottom:16px">'
     + '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">'
@@ -8219,6 +8234,8 @@ function saveReuniaoModal() {
   }
   saveState();
   renderReunioesPanel();
+  // A Dashboard mostra as reuniões de hoje/amanhã — actualizar se estiver aberta
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
   closeReuniaoModal();
   showBanner(_reuniaoModal === null ? '✓ Reunião criada' : '✓ Reunião atualizada', 'success');
 }
@@ -8231,6 +8248,8 @@ function deleteReuniaoFromModal() {
   state[sk].splice(idx, 1);
   saveState();
   renderReunioesPanel();
+  // A Dashboard mostra as reuniões de hoje/amanhã — actualizar se estiver aberta
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
   closeReuniaoModal();
   showBanner('Reunião apagada', 'success');
 }
