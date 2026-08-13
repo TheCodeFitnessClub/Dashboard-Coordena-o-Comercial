@@ -16,6 +16,14 @@
   --yellow:#FCD34D; --yellow-l:rgba(252,211,77,.10);
   --blue:#60A5FA;  --bg:#0A0A0A;
   --card-bg:#141414;
+  /* Rampa da marca (preto + laranja) — um só matiz, do mais claro ao mais escuro.
+     Usada em tudo o que é identidade/categoria: gráficos, prioridades, tipos.
+     Validada com scripts/validate_palette.js da skill dataviz contra o fundo
+     #141414: luminosidade monótona, degraus >= 0.06 e extremo claro acima do
+     mínimo de contraste. O tema claro tem a sua própria versão, mais escura. */
+  --cat1:#FFB644; --cat2:#FF8C00; --cat3:#FA5F00;
+  --cat4:#D65100; --cat5:#B34200; --cat6:#913400;
+  --cat-neutro:#6B7B8D; --cat-neutro2:#94A3B8; --cat-neutro3:#475569;
   --card-shadow:0 2px 16px rgba(0,0,0,.6);
   --card-shadow-hover:0 6px 28px rgba(0,0,0,.8);
   --radius:12px; --radius-sm:8px;
@@ -24,6 +32,11 @@
 body.light-mode{
   --dark:#1E293B; --dark2:#475569; --grey:#64748B; --grey-l:#F1F5F9; --line:#E2E8F0;
   --bg:#F8FAFC; --card-bg:#FFFFFF;
+  /* Mesma rampa, deslocada um degrau para baixo: sobre fundo branco os tons
+     mais claros não teriam contraste suficiente. Validada contra #FFFFFF. */
+  --cat1:#FF8C00; --cat2:#FA5F00; --cat3:#D65100;
+  --cat4:#B34200; --cat5:#913400; --cat6:#702700;
+  --cat-neutro:#64748B; --cat-neutro2:#94A3B8; --cat-neutro3:#334155;
   --card-shadow:0 1px 8px rgba(0,0,0,.07),0 0 1px rgba(0,0,0,.05);
   --card-shadow-hover:0 4px 20px rgba(0,0,0,.12);
   color-scheme:light;
@@ -114,9 +127,9 @@ body{display:flex;min-height:100vh}
 .period-pill{padding:5px 13px;border:1.5px solid var(--line);border-radius:20px;font-size:12px;cursor:pointer;background:none;color:var(--grey);font-family:inherit;font-weight:500;transition:all .15s;white-space:nowrap;line-height:1.3}
 .period-pill:hover{border-color:var(--orange);color:var(--orange)}
 .period-pill.active{background:var(--orange);border-color:var(--orange);color:#000;font-weight:700}
-.period-pill.compare-pill{border-color:rgba(168,85,247,.4);color:#A855F7}
-.period-pill.compare-pill:hover{border-color:#A855F7;background:rgba(168,85,247,.08)}
-.period-pill.compare-pill.active{background:#A855F7;border-color:#A855F7;color:white}
+.period-pill.compare-pill{border-color:rgba(255,182,68,.4);color:#FFB644}
+.period-pill.compare-pill:hover{border-color:#FFB644;background:rgba(255,182,68,.08)}
+.period-pill.compare-pill.active{background:#FFB644;border-color:#FFB644;color:white}
 
 /* ── Period navigation bar ── */
 .period-nav-bar{display:flex;align-items:center;gap:6px;padding:0 28px;background:rgba(249,115,22,.03);border-bottom:1px solid rgba(249,115,22,.1);height:44px;flex-shrink:0}
@@ -130,35 +143,35 @@ body{display:flex;min-height:100vh}
 .pnb-today:hover{background:var(--orange-l)}
 
 /* ── Compare mode banner ── */
-.compare-banner{display:flex;align-items:center;gap:10px;background:rgba(168,85,247,.08);border:1.5px solid rgba(168,85,247,.25);border-radius:var(--radius-sm);padding:7px 14px;margin-bottom:14px;font-size:12px;color:#A855F7;font-weight:600}
+.compare-banner{display:flex;align-items:center;gap:10px;background:rgba(255,182,68,.08);border:1.5px solid rgba(255,182,68,.25);border-radius:var(--radius-sm);padding:7px 14px;margin-bottom:14px;font-size:12px;color:#FFB644;font-weight:600}
 .compare-banner .cb-period{font-weight:400;color:var(--grey);margin-left:6px}
 .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:780px){.compare-grid{grid-template-columns:1fr}}
 .compare-col-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:5px 12px;border-radius:var(--radius-sm);margin-bottom:10px;text-align:center}
 .compare-col-hdr.cur{background:rgba(249,115,22,.12);color:var(--orange)}
-.compare-col-hdr.prev{background:rgba(168,85,247,.12);color:#A855F7}
+.compare-col-hdr.prev{background:rgba(255,182,68,.12);color:#FFB644}
 /* Compare controls bar (horizontal, below topbar) */
-.compare-nav-bar{display:flex;align-items:center;gap:14px;padding:8px 28px;background:rgba(168,85,247,.06);border-bottom:1px solid rgba(168,85,247,.18);min-height:44px;flex-shrink:0;flex-wrap:wrap}
-.cnb-title{font-size:11px;font-weight:700;color:#A855F7;letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:5px}
-.cnb-pair{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(168,85,247,.04);border:1px solid rgba(168,85,247,.18)}
+.compare-nav-bar{display:flex;align-items:center;gap:14px;padding:8px 28px;background:rgba(255,182,68,.06);border-bottom:1px solid rgba(255,182,68,.18);min-height:44px;flex-shrink:0;flex-wrap:wrap}
+.cnb-title{font-size:11px;font-weight:700;color:#FFB644;letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:center;gap:5px}
+.cnb-pair{display:flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(255,182,68,.04);border:1px solid rgba(255,182,68,.18)}
 .cnb-pair-lbl{font-size:11px;color:var(--grey);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-right:2px}
-.cnb-vs{font-size:10px;font-weight:700;color:#A855F7;text-transform:uppercase;letter-spacing:.5px;padding:0 4px}
-.cnb-select{padding:4px 8px;border:1.5px solid rgba(168,85,247,.3);border-radius:var(--radius-sm);font-size:12px;background:rgba(168,85,247,.06);color:var(--dark);font-family:inherit;cursor:pointer;transition:border-color .15s;min-width:120px}
-.cnb-select:focus{outline:none;border-color:#A855F7}
+.cnb-vs{font-size:10px;font-weight:700;color:#FFB644;text-transform:uppercase;letter-spacing:.5px;padding:0 4px}
+.cnb-select{padding:4px 8px;border:1.5px solid rgba(255,182,68,.3);border-radius:var(--radius-sm);font-size:12px;background:rgba(255,182,68,.06);color:var(--dark);font-family:inherit;cursor:pointer;transition:border-color .15s;min-width:120px}
+.cnb-select:focus{outline:none;border-color:#FFB644}
 .cnb-select option{background:#1e1e1e;color:#E2E8F0}
 body.light-mode .cnb-select{background:#FFFFFF;color:#1E293B}
 body.light-mode .cnb-select option{background:#FFFFFF;color:#1E293B}
-.cnb-period-group{display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(168,85,247,.04);border:1px solid rgba(168,85,247,.18)}
-.cnb-pill{padding:4px 11px;border:1.5px solid rgba(168,85,247,.3);border-radius:20px;font-size:11px;cursor:pointer;background:none;color:var(--grey);font-family:inherit;font-weight:500;transition:all .15s;white-space:nowrap}
-.cnb-pill:hover{border-color:#A855F7;color:#A855F7}
-.cnb-pill.active{background:#A855F7;border-color:#A855F7;color:white;font-weight:700}
-.cnb-anchor-input{padding:4px 9px;border:1.5px solid rgba(168,85,247,.35);border-radius:var(--radius-sm);font-size:12px;background:rgba(168,85,247,.08);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark;margin-left:8px;font-weight:600}
+.cnb-period-group{display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-sm);background:rgba(255,182,68,.04);border:1px solid rgba(255,182,68,.18)}
+.cnb-pill{padding:4px 11px;border:1.5px solid rgba(255,182,68,.3);border-radius:20px;font-size:11px;cursor:pointer;background:none;color:var(--grey);font-family:inherit;font-weight:500;transition:all .15s;white-space:nowrap}
+.cnb-pill:hover{border-color:#FFB644;color:#FFB644}
+.cnb-pill.active{background:#FFB644;border-color:#FFB644;color:white;font-weight:700}
+.cnb-anchor-input{padding:4px 9px;border:1.5px solid rgba(255,182,68,.35);border-radius:var(--radius-sm);font-size:12px;background:rgba(255,182,68,.08);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark;margin-left:8px;font-weight:600}
 body.light-mode .cnb-anchor-input{color-scheme:light;background:#FFFFFF;color:#1E293B}
-.cnb-anchor-input:focus{outline:none;border-color:#A855F7;box-shadow:0 0 0 2px rgba(168,85,247,.15)}
+.cnb-anchor-input:focus{outline:none;border-color:#FFB644;box-shadow:0 0 0 2px rgba(255,182,68,.15)}
 .cnb-anchor-input option{background:#1e1e1e;color:#E2E8F0}
 body.light-mode .cnb-anchor-input option{background:#FFFFFF;color:#1E293B}
-.cnb-exit{padding:4px 14px;border:1.5px solid rgba(168,85,247,.45);border-radius:20px;background:none;color:#A855F7;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;transition:all .15s;margin-left:auto}
-.cnb-exit:hover{background:#A855F7;color:white}
+.cnb-exit{padding:4px 14px;border:1.5px solid rgba(255,182,68,.45);border-radius:20px;background:none;color:#FFB644;font-size:11px;cursor:pointer;font-family:inherit;font-weight:700;transition:all .15s;margin-left:auto}
+.cnb-exit:hover{background:#FFB644;color:white}
 /* Hide normal topbar filters and period nav bar when compare is active */
 body.compare-active .topbar-filter-lbl,
 body.compare-active .topbar-filter,
@@ -166,8 +179,8 @@ body.compare-active .topbar-filter-sep,
 body.compare-active #period-pills .period-pill:not(.compare-pill),
 body.compare-active #period-nav-bar{display:none !important}
 /* "vs comparison" block — works in any KPI/card container */
-.kpi-vs{font-size:11px;color:var(--grey);font-weight:500;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(168,85,247,.3);display:flex;align-items:center;gap:6px}
-.kpi-vs .vs-tag{font-size:9px;font-weight:700;color:#A855F7;letter-spacing:.5px;text-transform:uppercase}
+.kpi-vs{font-size:11px;color:var(--grey);font-weight:500;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,182,68,.3);display:flex;align-items:center;gap:6px}
+.kpi-vs .vs-tag{font-size:9px;font-weight:700;color:#FFB644;letter-spacing:.5px;text-transform:uppercase}
 .kpi-vs .vs-val{font-weight:700;color:var(--dark)}
 .kpi-vs .vs-delta{margin-left:auto;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:700}
 .kpi-vs .vs-delta.up{background:rgba(34,197,94,.15);color:var(--green)}
@@ -338,8 +351,8 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .lead-warning.red .lead-warning-item .days{color:#EF4444;background:rgba(239,68,68,.12)}
 /* task warning priority pills */
 .tw-prio{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;flex-shrink:0;margin-right:2px}
-.tw-prio-Alta{background:rgba(248,113,113,.15);color:#F87171}
-.tw-prio-Média{background:rgba(252,211,77,.12);color:#FCD34D}
+.tw-prio-Alta{background:rgba(250,95,0,.18);color:var(--cat3)}
+.tw-prio-Média{background:rgba(255,182,68,.15);color:var(--cat1)}
 .tw-prio-Baixa{background:rgba(107,123,141,.15);color:var(--grey)}
 
 /* ── Inputs grouped view ── */
@@ -412,9 +425,9 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .kanban-col[data-status="Feita"] h4{color:var(--green)}
 .task-card{background:var(--bg);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;font-size:12px;cursor:grab;border-left:3px solid var(--orange);transition:box-shadow .15s}
 .task-card:hover{box-shadow:var(--card-shadow)}
-.task-card.prio-Alta{border-left-color:var(--red)}
-.task-card.prio-Média{border-left-color:var(--yellow)}
-.task-card.prio-Baixa{border-left-color:var(--blue)}
+.task-card.prio-Alta{border-left-color:var(--cat3)}
+.task-card.prio-Média{border-left-color:var(--cat1)}
+.task-card.prio-Baixa{border-left-color:var(--cat-neutro)}
 .task-card .t-title{font-weight:600;color:var(--dark);margin-bottom:4px}
 .task-card .t-meta{display:flex;justify-content:space-between;color:var(--grey);font-size:10px;margin-top:6px;font-weight:500}
 .task-card.overdue{background:var(--red-l);border-left-color:var(--red)}
@@ -431,7 +444,7 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .notif-tag{background:var(--grey-l);padding:1px 7px;border-radius:20px;font-weight:600}
 .notif-when{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;padding-top:2px}
 .notif.is-late{background:var(--red-l);border-color:rgba(248,113,113,.35)}
-.notif.is-doing{border-left:3px solid var(--blue)}
+.notif.is-doing{border-left:3px solid var(--cat3)}
 /* Kanban da Rotina — 4 colunas (uma por frequência) */
 .kanban.kanban-4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1100px){.kanban.kanban-4{grid-template-columns:repeat(2,1fr)}}
@@ -608,8 +621,8 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .log-saved{font-size:11px;color:var(--green)}
 .convidados-cell{padding:6px 8px;display:flex;flex-direction:column;gap:4px;min-width:200px}
 .convidados-tags{display:flex;flex-wrap:wrap;gap:4px}
-.convidado-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(96,165,250,.12);color:#60A5FA;border-radius:20px;font-size:11px;font-weight:500}
-.convidado-tag button{background:none;border:none;cursor:pointer;color:#60A5FA;font-size:13px;padding:0;line-height:1;font-weight:700}
+.convidado-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(250,95,0,.14);color:var(--cat3);border-radius:20px;font-size:11px;font-weight:500}
+.convidado-tag button{background:none;border:none;cursor:pointer;color:var(--cat3);font-size:13px;padding:0;line-height:1;font-weight:700}
 .convidado-tag button:hover{color:var(--red)}
 .rlog-card{background:var(--card-bg);border-radius:var(--radius);box-shadow:var(--card-shadow);margin-bottom:16px;padding:20px 24px}
 .rlog-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px}
@@ -1402,6 +1415,28 @@ function _chartLegendColor() {
   return v || Chart.defaults.plugins.legend.labels.color || '#B0BDD0';
 }
 
+// ── Rampa da marca (preto + laranja) ──────────────────────────────────────
+// Lida do tema activo, para o claro e o escuro usarem os seus próprios degraus.
+// `n` cores: percorre a rampa e, se forem precisas mais, cai nos neutros — é
+// deliberado, porque a partir daí a cor deixa de conseguir distinguir sozinha
+// (as categorias têm sempre rótulo ao lado).
+function _rampaMarca(n) {
+  const cs = getComputedStyle(document.body);
+  const ler = v => cs.getPropertyValue(v).trim();
+  const rampa   = ['--cat1','--cat2','--cat3','--cat4','--cat5','--cat6'].map(ler).filter(Boolean);
+  const neutros = ['--cat-neutro','--cat-neutro2','--cat-neutro3'].map(ler).filter(Boolean);
+  const base = rampa.length ? rampa : ['#FFB644','#FF8C00','#FA5F00','#D65100','#B34200','#913400'];
+  const nt   = neutros.length ? neutros : ['#6B7B8D','#94A3B8','#475569'];
+  if (!n) return base;
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(i < base.length ? base[i] : nt[(i - base.length) % nt.length]);
+  return out;
+}
+// Cor única da marca, para gráficos de uma só série
+function _corMarca() {
+  return getComputedStyle(document.body).getPropertyValue('--cat3').trim() || '#FA5F00';
+}
+
 if (typeof structuredClone === 'undefined') { window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj)); }
 
 // ── Constants ──────────────────────────────────────────────
@@ -1905,15 +1940,39 @@ function _applyThemeBtns(theme) {
   dark.style.cssText  += ';' + (theme==='dark'  ? activeStyle : inactiveStyle);
   light.style.cssText += ';' + (theme==='light' ? activeStyle : inactiveStyle);
 }
+// ── Paletas derivadas da rampa da marca ───────────────────────────────────
+// São reconstruídas sempre que o tema muda, porque o claro e o escuro usam
+// degraus diferentes. Vermelho e verde ficam de fora: são cores de ESTADO
+// (atrasado, ganho/perdido) e não devem ser reaproveitadas como categoria.
+function _aplicarPaletaMarca() {
+  const r  = _rampaMarca();                       // 6 degraus, claro → escuro
+  const nt = getComputedStyle(document.body).getPropertyValue('--cat-neutro').trim() || '#6B7B8D';
+
+  SOURCE_COLORS = _rampaMarca(10);
+  MOTIVO_COLORS = _rampaMarca(9);
+
+  // Prioridade é uma escala: quanto mais alta, mais forte o laranja.
+  PRIO_COR   = { 'Alta': r[2], 'Média': r[0], 'Baixa': nt };
+  // Estado da tarefa: "Feita" é sucesso, logo verde (estado, não categoria).
+  // Hex e não var(--green): estas cores levam o sufixo "22" para o fundo das pills.
+  ESTADO_COR = { 'A fazer': nt, 'Em curso': r[2], 'Feita': '#22C55E' };
+  FREQ_COR   = { 'Diária': r[0], 'Semanal': r[2], 'Mensal': r[4], 'Pontual': nt };
+  REUNIAO_COR = { reunioesD:r[0], reunioesS:r[1], reunioesM:r[2], reunioesC:r[3], reunioesDir:r[4] };
+  // Reuniões: "Por fechar" é um alerta e "Realizada" um sucesso — cores de estado.
+  REUNIAO_EST_COR = { 'Agendada': r[2], 'Por fechar':'#F87171', 'Realizada':'#22C55E' };
+}
 function setTheme(theme) {
   localStorage.setItem(THEME_KEY, theme);
   document.body.classList.toggle('light-mode', theme==='light');
   _applyThemeBtns(theme);
+  _aplicarPaletaMarca();
+  renderActivePanel();
 }
 function loadTheme() {
   const theme = localStorage.getItem(THEME_KEY) || 'dark';
   document.body.classList.toggle('light-mode', theme==='light');
   _applyThemeBtns(theme);
+  _aplicarPaletaMarca();
 }
 function saveNow() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
@@ -2578,7 +2637,7 @@ function buildCompareAnchorPicker() {
   const {start: startA} = getPeriodRange(p, false, anchorA);
   const {start: startB} = getPeriodRange(p, true,  anchorA); // uses dateB or defaults to prev period
   const sA = 'border-color:rgba(249,115,22,.7)'; // orange = side A
-  const sB = 'border-color:rgba(168,85,247,.7)'; // purple = side B
+  const sB = 'border-color:rgba(255,182,68,.7)'; // purple = side B
   let pA, pB;
   if (p === 'dia') {
     pA = '<input type="date" class="cnb-anchor-input" style="'+sA+'" value="'+toISODate(startA)+'" onchange="setCompareDateA(this.value)" title="Data A">';
@@ -2784,9 +2843,9 @@ function updateCompareBanner() {
       '<span class="cb-period">'+
         '<b style="color:var(--orange)">A</b> '+escapeHtml(sideA)+
         ' <span style="color:#6B7B8D">vs</span> '+
-        '<b style="color:#A855F7">B</b> '+escapeHtml(sideB)+
+        '<b style="color:#FFB644">B</b> '+escapeHtml(sideB)+
       '</span>'+
-      '<button onclick="setPeriod(\'comparar\')" style="margin-left:auto;background:none;border:1px solid rgba(168,85,247,.4);border-radius:6px;color:#A855F7;font-size:11px;cursor:pointer;padding:3px 10px;font-family:inherit">Desativar</button>'+
+      '<button onclick="setPeriod(\'comparar\')" style="margin-left:auto;background:none;border:1px solid rgba(255,182,68,.4);border-radius:6px;color:#FFB644;font-size:11px;cursor:pointer;padding:3px 10px;font-family:inherit">Desativar</button>'+
       '</div>';
   } else {
     el.style.display = 'none';
@@ -2954,21 +3013,21 @@ function renderInputsKpis() {
 
 // ── Inputs Diários: gráfico de evolução diária (uma métrica de cada vez) ──
 const INPUTS_DAILY_METRICS = [
-  { key:'leadsRec',   label:'Leads',          color:'#F97316' },
-  { key:'chamadasEf', label:'Cham. ef.',      color:'#22C55E' },
-  { key:'chamadasAt', label:'Cham. at.',      color:'#10B981' },
-  { key:'marc',       label:'Marcações',      color:'#A855F7' },
-  { key:'visitas',    label:'Visitas',        color:'#60A5FA' },
-  { key:'conv',       label:'Conversões',     color:'#FBBF24' },
-  { key:'pos',        label:'POS',            color:'#94A3B8' },
-  { key:'walkin',     label:'Walk-in',        color:'#F87171' },
-  { key:'walkinSale', label:'WI sale',        color:'#EC4899' },
-  { key:'outbound',   label:'Outbound',       color:'#0EA5E9' },
-  { key:'contAng',    label:'REF',            color:'#84CC16' },
-  { key:'marcDia',    label:'Marc. dia',      color:'#D946EF' },
+  { key:'leadsRec',   label:'Leads',          color:'#FA5F00' },
+  { key:'chamadasEf', label:'Cham. ef.',      color:'#FF8C00' },
+  { key:'chamadasAt', label:'Cham. at.',      color:'#D65100' },
+  { key:'marc',       label:'Marcações',      color:'#FFB644' },
+  { key:'visitas',    label:'Visitas',        color:'#B34200' },
+  { key:'conv',       label:'Conversões',     color:'#913400' },
+  { key:'pos',        label:'POS',            color:'#FA5F00' },
+  { key:'walkin',     label:'Walk-in',        color:'#FF8C00' },
+  { key:'walkinSale', label:'WI sale',        color:'#D65100' },
+  { key:'outbound',   label:'Outbound',       color:'#FFB644' },
+  { key:'contAng',    label:'REF',            color:'#B34200' },
+  { key:'marcDia',    label:'Marc. dia',      color:'#913400' },
 ];
 let _inputsDailyMetric = 'leadsRec';
-const CLUBE_COLORS = { 'Cidade Universitária':'#F97316', 'Saldanha':'#A855F7', 'Universidade Nova':'#22C55E' };
+const CLUBE_COLORS = { 'Cidade Universitária':'#F97316', 'Saldanha':'#FFB644', 'Universidade Nova':'#22C55E' };
 function setInputsDailyMetric(key) {
   _inputsDailyMetric = key;
   renderInputsDailyChart();
@@ -3292,9 +3351,9 @@ const REUNIOES_KEYS = ['reunioesD','reunioesS','reunioesM','reunioesC','reunioes
 // Os 5 arrays continuam separados (não há migração de dados); a vista percorre
 // todos e etiqueta cada reunião com o seu tipo.
 const REUNIAO_TIPO  = { reunioesD:'Diária', reunioesS:'Semanal', reunioesM:'Mensal', reunioesC:'Coordenação', reunioesDir:'Direção' };
-const REUNIAO_COR   = { reunioesD:'#F97316', reunioesS:'#60A5FA', reunioesM:'#22C55E', reunioesC:'#A855F7', reunioesDir:'#F87171' };
+let REUNIAO_COR   = {};
 const REUNIAO_ESTADOS = ['Agendada','Por fechar','Realizada'];
-const REUNIAO_EST_COR = { 'Agendada':'#60A5FA', 'Por fechar':'#FCD34D', 'Realizada':'#22C55E' };
+let REUNIAO_EST_COR = {};
 
 // Tem ata preenchida? É o que marca, na prática, uma reunião como feita.
 function reuniaoTemAta(row) {
@@ -3720,7 +3779,7 @@ function renderTempoRespChart() {
 
   // Use global Clube filter (topbar)
   const clubes = filters.unit ? [filters.unit] : UNIDADES;
-  const CORES  = ['#F97316','#A855F7','#22C55E'];
+  const CORES  = ['#F97316','#FFB644','#22C55E'];
   const p = filters.period;
   const anchorDate = getAnchorDate();
 
@@ -4021,7 +4080,7 @@ function renderDashboard() {
     h += '<div class="dash-section-label">Planos vendidos no período</div>';
     h += '<div class="grid c4" style="margin-bottom:4px">';
     h += _kpiCard('Total vendas', totPlanos, 'no período filtrado', '');
-    h += _kpiCard('Offpeak', totPlanos>0 ? pctOP+'%'   : '', totOP+' planos',   '', 'border-left:3px solid #A855F7');
+    h += _kpiCard('Offpeak', totPlanos>0 ? pctOP+'%'   : '', totOP+' planos',   '', 'border-left:3px solid #FFB644');
     h += _kpiCard('One',     totPlanos>0 ? pctONE+'%'  : '', totONE+' planos',  '', 'border-left:3px solid #22C55E');
     h += _kpiCard('Plus',    totPlanos>0 ? pctPLUS+'%' : '', totPLUS+' planos', '', 'border-left:3px solid #F97316');
     h += '</div>';
@@ -4066,7 +4125,7 @@ function renderSociosDashChart() {
   const {allRows, sel} = _dashSociosData();
   const periods = [...sel].sort();
   const unitsShow = filters.unit ? [filters.unit] : UNIDADES;
-  const CORES = ['#F97316','#A855F7','#22C55E'];
+  const CORES = ['#F97316','#FFB644','#22C55E'];
   const datasets = unitsShow.map((u,i)=>({
     label: u,
     data: periods.map(p=>{ const r=allRows.find(x=>x.periodo===p&&x.unidade===u); return r?computeSociosFim(r):null; }),
@@ -4088,7 +4147,7 @@ function renderVendasDashChart() {
   const {all, sel} = _dashVendasData();
   const periods = [...sel].sort();
   const unitsShow = filters.unit ? [filters.unit] : UNIDADES;
-  const CORES = ['#F97316','#A855F7','#22C55E'];
+  const CORES = ['#F97316','#FFB644','#22C55E'];
   const datasets = unitsShow.map((u,i)=>({
     label: u,
     data: periods.map(p=>all.filter(r=>r.unidade===u&&r.data.slice(0,7)===p).reduce((s,r)=>s+(Number(r.qtd)||0),0)),
@@ -4108,7 +4167,8 @@ function renderVendasDashChart() {
 // Apresenta, para cada source, a qty de leads que entraram no período e a
 // percentagem de ganhos / perdidos / em curso. Ganhos e perdidos seguem a
 // lógica de dataFecho (fecho no período).
-const SOURCE_COLORS = ['#F97316','#A855F7','#22C55E','#60A5FA','#FBBF24','#F87171','#FB923C','#94A3B8','#34D399','#C084FC'];
+// Preenchidas a partir da rampa da marca em _aplicarPaletaMarca()
+let SOURCE_COLORS = [];
 // Lista fixa de sources que aparecem SEMPRE como card (mesmo com 0 leads).
 // "LEADS" do Closum é renomeado para "Contacto Direto Clube" via normalizeSource()
 const SOURCE_BASELINE = [
@@ -4205,7 +4265,7 @@ function renderConvSourceDisplay() {
       <div class="sub">
         <span style="color:#22C55E">${st.ganhos} ganhos (${pctG}%)</span> ·
         <span style="color:#F87171">${st.perdidos} perdidos (${pctP}%)</span> ·
-        <span style="color:#60A5FA">${st.emCurso} em curso (${pctE}%)</span>
+        <span style="color:var(--cat3)">${st.emCurso} em curso (${pctE}%)</span>
       </div>
     </div>`;
   }).join('');
@@ -4290,7 +4350,7 @@ const MOTIVO_OPTIONS = [
   'Sem motivo',
 ];
 const MOTIVO_CUTOFF = '2026-06-01';
-const MOTIVO_COLORS = ['#F97316','#A855F7','#22C55E','#F87171','#FB923C','#60A5FA','#FBBF24','#94A3B8','#475569'];
+let MOTIVO_COLORS = [];
 
 function aggregateMotivosPerdidos(previous, sourceFilter) {
   // Espelha o filtro "Motivo de Negócio Perdido" do Closum: conta as leads pelo
@@ -4474,7 +4534,7 @@ function showTodoPopup() {
         + _prioBadge(t.prioridade)
         + '<span style="flex:1;color:var(--dark)">'+escapeHtml(t.titulo||'(sem título)')
           + (extra ? ' <span style="color:var(--grey);font-size:11px">· '+escapeHtml(extra)+'</span>' : '')
-          + (emCurso ? ' <span style="color:#60A5FA;font-size:10px;font-weight:700">EM CURSO</span>' : '')
+          + (emCurso ? ' <span style="color:var(--cat3);font-size:10px;font-weight:700">EM CURSO</span>' : '')
           + '</span>'
         + (prazo ? '<span style="font-size:11px;font-weight:600;color:'+(atrasada?'var(--red)':'var(--grey)')+'">'+(atrasada?'⚠ ':'')+escapeHtml(prazo)+'</span>' : '')
         + '</div>';
@@ -5079,7 +5139,7 @@ function drawSociosCharts(allRows, selRows) {
   if (!allRows.length) return;
   const periods=[...new Set(allRows.map(r=>r.periodo))].sort();
   const units=[...new Set(allRows.map(r=>r.unidade).filter(Boolean))];
-  const colors=["#F97316","#A855F7","#22C55E","#FCD34D"];
+  const colors=["#F97316","#FFB644","#22C55E","#FCD34D"];
   charts.sociosEvol=new Chart(ctx1,{type:"line",
     data:{labels:periods,datasets:units.map((u,i)=>({label:u,data:periods.map(p=>{const r=allRows.find(x=>x.periodo===p&&x.unidade===u);return r?computeSociosFim(r):null;}),borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+"18",tension:.35,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:colors[i%colors.length],borderWidth:2}))},
     options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:"Sócios ativos por unidade"}},scales:{x:{grid:{display:false}},y:{beginAtZero:false}}}});
@@ -5165,10 +5225,10 @@ let _tarefaForm = { prioridade:'Média', estado:'A fazer' };
 
 // Hex literal (e não var(--red)): juntamos o sufixo de opacidade "22" e
 // "var(--red)22" não seria cor válida. Estas cores não mudam entre temas.
-const PRIO_COR   = { 'Alta':'#F87171', 'Média':'#FCD34D', 'Baixa':'#60A5FA' };
-const ESTADO_COR = { 'A fazer':'#6B7B8D', 'Em curso':'#60A5FA', 'Feita':'#22C55E' };
+let PRIO_COR   = {};
+let ESTADO_COR = {};
 // Na rotina, a frequência ocupa o lugar da prioridade (cor do ícone e da 1ª etiqueta)
-const FREQ_COR   = { 'Diária':'#60A5FA', 'Semanal':'#A855F7', 'Mensal':'#F97316', 'Pontual':'#22C55E' };
+let FREQ_COR   = {};
 const FREQUENCIAS = ['Diária','Semanal','Mensal','Pontual'];
 
 // Cartão de notificação de uma tarefa. Usado na aba Dashboard E na
@@ -5202,7 +5262,7 @@ function _notifCardHtml(t, idx) {
   const info    = _prazoInfo(t.prazo, t.estado);
   const emCurso = (t.estado||'') === 'Em curso';
   const tags    = [{ label: prio, color: cor }];
-  if (emCurso)    tags.push({ label: 'EM CURSO', color: '#60A5FA' });
+  if (emCurso)    tags.push({ label: 'EM CURSO', color: ESTADO_COR['Em curso'] || '#FA5F00' });
   if (t.criadoEm) tags.push({ label: 'criada a ' + fmtDate(t.criadoEm) });
   return _notifBaseHtml({
     cor, info, tags,
@@ -5798,14 +5858,17 @@ function mapClosumUnidade(str) {
 function seqColor(val) {
   if (!val || val === '—') return '#6B7B8D';
   // Casos específicos usados nos cards da secção "Leads & Estado de Sequência"
-  if (val === 'Sem sequência')       return '#94A3B8';
-  if (val === 'Proposta Apresentada') return '#EAB308';
+  // O funil é uma progressão: quanto mais avançada a fase, mais escuro o laranja.
+  // Ganho e Perdido são ESTADOS terminais, por isso ficam verde e vermelho.
+  const r = _rampaMarca();
+  if (val === 'Sem sequência')        return '#94A3B8';
   const v = val.toLowerCase();
   if (v.includes('ganho') || v.includes('won') || v.includes('adesão') || v.includes('ades')) return '#22C55E';
   if (v.includes('perdido') || v.includes('lost') || v.includes('não interessado') || v.includes('sem resposta')) return '#F87171';
-  if (v.includes('primeiro') || v.includes('1º') || v.includes('first')) return '#60A5FA';
-  if (v.includes('follow') || v.includes('segundo') || v.includes('2º')) return '#FB923C';
-  if (v.includes('visita') || v.includes('marcou') || v.includes('agendou')) return '#A78BFA';
+  if (v.includes('primeiro') || v.includes('1º') || v.includes('first')) return r[0];
+  if (v.includes('follow') || v.includes('segundo') || v.includes('2º')) return r[1];
+  if (v.includes('visita') || v.includes('marcou') || v.includes('agendou')) return r[2];
+  if (val === 'Proposta Apresentada') return r[3];
   return '#6B7B8D';
 }
 function seqBadgeStyle(val) {
@@ -5816,11 +5879,11 @@ function seqBadgeStyle(val) {
   if (v.includes('perdido') || v.includes('lost') || v.includes('não interessado') || v.includes('sem resposta'))
     return 'background:rgba(248,113,113,.18);color:#F87171';
   if (v.includes('primeiro') || v.includes('1º') || v.includes('first'))
-    return 'background:rgba(96,165,250,.18);color:#60A5FA';
+    return 'background:'+_rampaMarca()[0]+'2E;color:'+_rampaMarca()[0];
   if (v.includes('follow') || v.includes('segundo') || v.includes('2º'))
-    return 'background:rgba(251,146,60,.18);color:#FB923C';
+    return 'background:'+_rampaMarca()[1]+'2E;color:'+_rampaMarca()[1];
   if (v.includes('visita') || v.includes('marcou') || v.includes('agendou'))
-    return 'background:rgba(167,139,250,.18);color:#A78BFA';
+    return 'background:'+_rampaMarca()[2]+'2E;color:'+_rampaMarca()[2];
   return 'background:rgba(107,123,141,.15);color:#6B7B8D';
 }
 
