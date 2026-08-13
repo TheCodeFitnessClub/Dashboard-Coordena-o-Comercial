@@ -916,70 +916,23 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
      REUNIÕES
 ══════════════════════════════════════════ -->
 <section class="panel" id="panel-reunioes">
-  <nav class="sub-tabs" data-group="reunioes">
-    <button class="active" data-subtab="diarias">Diárias</button>
-    <button data-subtab="semanais">Semanais</button>
-    <button data-subtab="mensais">Mensais</button>
-    <button data-subtab="coordenacao">Coordenação</button>
-    <button data-subtab="direcao">Direção</button>
-    <button data-subtab="log">📋 Log</button>
-  </nav>
+  <h2 class="section">Reuniões
+    <span class="actions">
+      <button onclick="openReuniaoModal()" class="primary">+ Nova reunião</button>
+    </span>
+  </h2>
+  <!-- Avisos: reuniões de hoje e de amanhã -->
+  <div id="reunioes-alert-zone"></div>
 
-  <!-- Diárias -->
-  <div class="sub-panel active" data-subpanel="diarias">
-    <h2 class="section">Reuniões diárias
-      <span class="actions">
-        <button onclick="addRow('reunioesD')" class="primary">+ Nova reunião</button>
-      </span>
-    </h2>
-    <div id="t-reunioesD"></div>
-  </div>
-
-  <!-- Semanais -->
-  <div class="sub-panel" data-subpanel="semanais">
-    <h2 class="section">Reuniões semanais
-      <span class="actions">
-        <button onclick="addRow('reunioesS')" class="primary">+ Nova reunião</button>
-      </span>
-    </h2>
-    <div id="t-reunioesS"></div>
-  </div>
-
-  <!-- Mensais -->
-  <div class="sub-panel" data-subpanel="mensais">
-    <h2 class="section">Reuniões mensais
-      <span class="actions">
-        <button onclick="addRow('reunioesM')" class="primary">+ Nova reunião</button>
-      </span>
-    </h2>
-    <div id="t-reunioesM"></div>
-  </div>
-
-  <!-- Coordenação -->
-  <div class="sub-panel" data-subpanel="coordenacao">
-    <h2 class="section">Reuniões de coordenação
-      <span class="actions">
-        <button onclick="addRow('reunioesC')" class="primary">+ Nova reunião</button>
-      </span>
-    </h2>
-    <div id="t-reunioesC"></div>
-  </div>
-
-  <!-- Direção -->
-  <div class="sub-panel" data-subpanel="direcao">
-    <h2 class="section">Reuniões de direção
-      <span class="actions">
-        <button onclick="addRow('reunioesDir')" class="primary">+ Nova reunião</button>
-      </span>
-    </h2>
-    <div id="t-reunioesDir"></div>
-  </div>
-
-  <!-- Log -->
-  <div class="sub-panel" data-subpanel="log">
-    <h2 class="section">Log de reuniões</h2>
-    <div id="reunioes-log-panel"></div>
-  </div>
+  <h2 class="section">Quadro de reuniões
+    <span class="actions" style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:10.5px;color:var(--grey);font-weight:600">Tipo:</label>
+      <select id="reunioes-tipo-filter" onchange="renderReunioesKanban()" style="padding:4px 10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:11px;background:var(--bg);color:var(--dark);font-family:inherit;cursor:pointer;color-scheme:dark">
+        <option value="">Todos</option>
+      </select>
+    </span>
+  </h2>
+  <div class="kanban" id="reunioes-kanban"></div>
 </section>
 
 <!-- ══════════════════════════════════════════
@@ -1001,33 +954,74 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 </section>
 
 
-<!-- Modal log de reunião -->
-<div class="log-modal-bg" id="log-modal-bg" onclick="if(event.target===this)closeMeetingLog()">
-  <div class="log-modal">
-    <div class="log-modal-head">
+<!-- Modal reunião (criar / editar + ata) — mesmo desenho dos de tarefa e rotina -->
+<div class="log-modal-bg" id="reuniao-modal-bg" onclick="if(event.target===this)closeReuniaoModal()">
+  <div class="tarefa-modal">
+    <div class="tarefa-modal-head">
+      <div class="notif-icon" id="reuniao-modal-icon">📅</div>
       <div>
-        <div class="log-modal-title" id="log-modal-title"></div>
-        <div class="log-modal-meta" id="log-modal-meta"></div>
+        <div class="tarefa-modal-title" id="reuniao-modal-title">Nova reunião</div>
+        <div class="tarefa-modal-meta" id="reuniao-modal-meta"></div>
       </div>
-      <button onclick="closeMeetingLog()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--grey);padding:0;line-height:1">×</button>
+      <button class="tarefa-modal-x" onclick="closeReuniaoModal()">×</button>
     </div>
-    <div class="log-section">
-      <div class="log-section-label">📋 Tópicos a discutir</div>
-      <textarea id="log-topicos" rows="5" placeholder="• Ponto 1&#10;• Ponto 2&#10;• Ponto 3"></textarea>
+
+    <div class="tarefa-prev-lbl">Como vai aparecer no quadro</div>
+    <div class="tarefa-prev" id="reuniao-preview"></div>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-titulo">Título</label>
+      <input type="text" id="reuniao-f-titulo" placeholder="Assunto da reunião" autocomplete="off" oninput="_updateReuniaoPreview()">
     </div>
-    <div class="log-section">
-      <div class="log-section-label">📝 Ata da reunião</div>
-      <textarea id="log-ata" rows="7" placeholder="Regista aqui o que foi discutido e decidido…"></textarea>
+
+    <div class="tarefa-field">
+      <label>Tipo</label>
+      <div class="pill-row" id="reuniao-pills-tipo"></div>
     </div>
-    <div class="log-section">
-      <div class="log-section-label">➕ Outros pontos</div>
-      <textarea id="log-outros" rows="4" placeholder="Notas adicionais, follow-ups, observações…"></textarea>
+
+    <div class="tarefa-grid2">
+      <div class="tarefa-field">
+        <label for="reuniao-f-data">Data</label>
+        <input type="date" id="reuniao-f-data" onchange="_updateReuniaoPreview()">
+      </div>
+      <div class="tarefa-field">
+        <label for="reuniao-f-hora">Hora</label>
+        <input type="time" id="reuniao-f-hora" onchange="_updateReuniaoPreview()">
+      </div>
     </div>
-    <div class="log-footer">
-      <span class="log-saved" id="log-saved-status"></span>
-      <div style="display:flex;gap:8px">
-        <button onclick="closeMeetingLog()" style="padding:7px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);background:var(--card-bg);cursor:pointer;font-family:inherit;font-size:12px;color:var(--dark)">Fechar</button>
-        <button onclick="saveMeetingLog()" style="padding:7px 18px;border:1.5px solid var(--orange);border-radius:var(--radius-sm);background:var(--orange);color:white;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">💾 Guardar</button>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-unidade">Unidade</label>
+      <select id="reuniao-f-unidade" onchange="_updateReuniaoPreview()"></select>
+    </div>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-convidados">Convidados (e-mail, um por linha)</label>
+      <textarea id="reuniao-f-convidados" rows="2" placeholder="nome@thecode.pt"></textarea>
+    </div>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-topicos">📋 Tópicos a discutir</label>
+      <textarea id="reuniao-f-topicos" rows="3" placeholder="• Ponto 1&#10;• Ponto 2" oninput="_updateReuniaoPreview()"></textarea>
+    </div>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-ata">📝 Ata da reunião</label>
+      <textarea id="reuniao-f-ata" rows="5" placeholder="O que foi discutido e decidido. Preencher aqui marca a reunião como realizada." oninput="_updateReuniaoPreview()"></textarea>
+    </div>
+
+    <div class="tarefa-field">
+      <label for="reuniao-f-outros">➕ Outros pontos</label>
+      <textarea id="reuniao-f-outros" rows="2" placeholder="Follow-ups, observações…" oninput="_updateReuniaoPreview()"></textarea>
+    </div>
+
+    <div class="tarefa-modal-foot">
+      <span class="log-saved" id="reuniao-modal-status"></span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button id="reuniao-modal-gcal" onclick="gcalFromReuniaoModal()" style="display:none;padding:7px 14px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--dark)">📅 Calendar</button>
+        <button id="reuniao-modal-del" onclick="deleteReuniaoFromModal()" style="display:none;padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--red)">Apagar</button>
+        <button onclick="closeReuniaoModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
+        <button onclick="saveReuniaoModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
       </div>
     </div>
   </div>
@@ -2895,8 +2889,8 @@ function renderTable(containerId, schemaKey, opts) {
       const _gcalBtn = sk==='tarefas' ? '<button class="btn-icon" title="Adicionar ao Google Calendar" onclick="openGcalTask(state.tarefas['+idx+'])">📅</button>'
         : REUNIOES_KEYS.includes(sk) ? '<button class="btn-icon" title="Adicionar ao Google Calendar" onclick="openGcalMeeting(\''+sk+'\','+idx+')">📅</button>'
         : '';
-      const _logBtn = REUNIOES_KEYS.includes(sk) ? '<button class="btn-icon" title="Abrir log da reunião" onclick="openMeetingLog(\''+sk+'\','+idx+')" style="font-size:14px">📋</button>' : '';
-      html += '<td class="act">'+_logBtn+_gcalBtn+'<button class="btn-icon dup" title="Duplicar" onclick="duplicateRow(\''+sk+'\','+idx+')">⎘</button><button class="btn-icon" title="Eliminar" onclick="deleteRow(\''+sk+'\','+idx+')">✕</button></td>';
+      // As reuniões deixaram de ter tabela — a ata abre-se pelo cartão do quadro.
+      html += '<td class="act">'+_gcalBtn+'<button class="btn-icon dup" title="Duplicar" onclick="duplicateRow(\''+sk+'\','+idx+')">⎘</button><button class="btn-icon" title="Eliminar" onclick="deleteRow(\''+sk+'\','+idx+')">✕</button></td>';
       html += '</tr>';
     });
   }
@@ -3294,6 +3288,46 @@ function addRow(schemaKey) {
   renderAllForKey(schemaKey);
 }
 const REUNIOES_KEYS = ['reunioesD','reunioesS','reunioesM','reunioesC','reunioesDir'];
+// ── Reuniões: tipo, estado e recolha das 5 listas ─────────────────────────
+// Os 5 arrays continuam separados (não há migração de dados); a vista percorre
+// todos e etiqueta cada reunião com o seu tipo.
+const REUNIAO_TIPO  = { reunioesD:'Diária', reunioesS:'Semanal', reunioesM:'Mensal', reunioesC:'Coordenação', reunioesDir:'Direção' };
+const REUNIAO_COR   = { reunioesD:'#F97316', reunioesS:'#60A5FA', reunioesM:'#22C55E', reunioesC:'#A855F7', reunioesDir:'#F87171' };
+const REUNIAO_ESTADOS = ['Agendada','Por fechar','Realizada'];
+const REUNIAO_EST_COR = { 'Agendada':'#60A5FA', 'Por fechar':'#FCD34D', 'Realizada':'#22C55E' };
+
+// Tem ata preenchida? É o que marca, na prática, uma reunião como feita.
+function reuniaoTemAta(row) {
+  const l = row && row.log;
+  return !!(l && (String(l.topicos||'').trim() || String(l.ata||'').trim() || String(l.outros||'').trim()));
+}
+// Estado sem exigir campo novo nos dados existentes:
+//   Realizada  → tem ata, ou foi marcada à mão
+//   Por fechar → a data já passou (ou é hoje) e continua sem ata
+//   Agendada   → data futura, ou ainda sem data
+function reuniaoEstado(row, hoje) {
+  if (row && row.realizada) return 'Realizada';
+  if (reuniaoTemAta(row))   return 'Realizada';
+  const d = String((row && row.data) || '').slice(0,10);
+  if (!d) return 'Agendada';
+  const hojeIso = (hoje || new Date()).toISOString().slice(0,10);
+  return d <= hojeIso ? 'Por fechar' : 'Agendada';
+}
+// Todas as reuniões das 5 listas, já com tipo e estado.
+function todasReunioes() {
+  const hoje = new Date();
+  const out = [];
+  REUNIOES_KEYS.forEach(sk => {
+    (state[sk] || []).forEach((row, idx) => {
+      out.push({ sk, idx, row, tipo: REUNIAO_TIPO[sk], estado: reuniaoEstado(row, hoje) });
+    });
+  });
+  return out;
+}
+// Data+hora combinadas, para ordenar
+function _reuniaoQuando(row) {
+  return String(row.data || '') + 'T' + String(row.hora || '00:00');
+}
 function openGcalMeeting(schemaKey, idx) {
   const row = (state[schemaKey]||[])[idx]; if (!row) return;
   const title = encodeURIComponent(row.titulo || 'Reunião');
@@ -5655,22 +5689,11 @@ function renderSubPanel(group, subtab) {
     renderLeadsPanel();
   }
   // "tarefas" já não tem sub-abas — ver renderTarefasPanel()
-  if (group==="reunioes") {
-    if (subtab==="diarias")     renderTable("t-reunioesD","reunioesD");
-    if (subtab==="semanais")    renderTable("t-reunioesS","reunioesS");
-    if (subtab==="mensais")     renderTable("t-reunioesM","reunioesM");
-    if (subtab==="coordenacao") renderTable("t-reunioesC","reunioesC");
-    if (subtab==="direcao")     renderTable("t-reunioesDir","reunioesDir");
-    if (subtab==="log")         renderMeetingLogsPanel();
-  }
+  // "reunioes" já não tem sub-abas — ver renderReunioesPanel()
 }
 function renderActiveKpisSubPanel() {
   const btn=document.querySelector("#panel-kpis .sub-tabs button.active");
   if (btn) renderSubPanel("kpis", btn.dataset.subtab);
-}
-function renderActiveReunioesSubPanel() {
-  const btn=document.querySelector("#panel-reunioes .sub-tabs button.active");
-  if (btn) renderSubPanel("reunioes", btn.dataset.subtab);
 }
 
 // ── renderAllForKey ─────────────────────────────────────────
@@ -5678,14 +5701,13 @@ function renderAllForKey(schemaKey) {
   const map={
     inputs:"t-inputs", leads:"t-leads",
     cancelamentos:"t-cancelamentos", socios:"t-socios",
-    reunioesD:"t-reunioesD", reunioesS:"t-reunioesS", reunioesM:"t-reunioesM",
-    reunioesC:"t-reunioesC", reunioesDir:"t-reunioesDir",
     equipa:"t-equipa", metas:"t-metas",
     objetivos:"t-objetivos", vendasExtras:"t-vendas-extras",
   };
   if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
   else if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
   if (schemaKey==="rotina") { renderRotinaAlert(); renderRotinaKanban(); }
+  if (REUNIOES_KEYS.includes(schemaKey)) renderReunioesPanel();
   if (schemaKey==="tarefas") {
     renderKanban();
   }
@@ -5713,7 +5735,7 @@ function renderActivePanel() {
   if (tab==="kpis")       renderActiveKpisSubPanel();
   if (tab==="closum")     renderLeadsPanel();
   if (tab==="tarefas")    renderTarefasPanel();
-  if (tab==="reunioes")   renderActiveReunioesSubPanel();
+  if (tab==="reunioes")   renderReunioesPanel();
   if (tab==="ficheiros")  renderFicheiros();
   if (tab==="socios")     renderSociosPanel();
   if (tab==="objetivos")  renderObjetivos();
@@ -7970,112 +7992,259 @@ document.querySelectorAll("#tabs button[data-tab='closum']").forEach(btn => {
   btn.addEventListener("click", () => updateLeadsSyncStatus());
 });
 
-// ── Log de reunião ────────────────────────────────────────────────
-let _logTarget = null; // { schemaKey, idx }
-function openMeetingLog(schemaKey, idx) {
-  const row = (state[schemaKey]||[])[idx]; if (!row) return;
-  _logTarget = { schemaKey, idx };
-  const log = row.log || {};
-  document.getElementById('log-topicos').value = log.topicos || '';
-  document.getElementById('log-ata').value     = log.ata     || '';
-  document.getElementById('log-outros').value  = log.outros  || '';
-  document.getElementById('log-saved-status').textContent = '';
-  const tipo = { reunioesD:'Diária', reunioesS:'Semanal', reunioesM:'Mensal', reunioesC:'Coordenação', reunioesDir:'Direção' }[schemaKey] || '';
-  document.getElementById('log-modal-title').textContent = (row.titulo || 'Reunião') + (tipo ? ' — '+tipo : '');
-  const meta = [row.data ? fmtDate(row.data) : '', row.hora || '', row.unidade || ''].filter(Boolean).join(' · ');
-  document.getElementById('log-modal-meta').textContent = meta;
-  document.getElementById('log-modal-bg').style.display = 'block';
+// ── Aba Reuniões — painel único (avisos + kanban) ─────────────────────────
+function renderReunioesPanel() {
+  _popularFiltroTipoReunioes();
+  renderReunioesAlert();
+  renderReunioesKanban();
 }
-function saveMeetingLog() {
-  if (!_logTarget) return;
-  const { schemaKey, idx } = _logTarget;
-  const row = (state[schemaKey]||[])[idx]; if (!row) return;
-  row.log = {
-    topicos: document.getElementById('log-topicos').value,
-    ata:     document.getElementById('log-ata').value,
-    outros:  document.getElementById('log-outros').value,
-  };
-  saveState();
-  const el = document.getElementById('log-saved-status');
-  const now = new Date();
-  el.textContent = '✓ Guardado às ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-}
-function closeMeetingLog() {
-  saveMeetingLog();
-  document.getElementById('log-modal-bg').style.display = 'none';
-  _logTarget = null;
-}
-function toggleRlogBody(id) {
-  const body = document.getElementById(id);
-  const btn  = document.getElementById(id+'-btn');
-  if (!body || !btn) return;
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : 'block';
-  btn.textContent = open ? '▾ Ver log' : '▴ Esconder';
-}
-let _meetingLogPage = 1;
-const MEETING_LOG_PAGE_SIZE = 10;
-function setMeetingLogPage(p) { _meetingLogPage = p; renderMeetingLogsPanel(); }
 
-function renderMeetingLogsPanel() {
-  const el = document.getElementById('reunioes-log-panel');
-  if (!el) return;
-  const TIPO_LABEL = { reunioesD:'Diária', reunioesS:'Semanal', reunioesM:'Mensal', reunioesC:'Coordenação', reunioesDir:'Direção' };
-  const TIPO_COLOR = { reunioesD:'#e07b39', reunioesS:'#3b82f6', reunioesM:'#10b981', reunioesC:'#8b5cf6', reunioesDir:'#ef4444' };
-  const entries = [];
-  const RKEYS = ['reunioesD','reunioesS','reunioesM','reunioesC','reunioesDir'];
-  RKEYS.forEach(sk => {
-    (state[sk]||[]).forEach((row, idx) => {
-      const log = row.log || {};
-      if (!log.topicos && !log.ata && !log.outros) return;
-      entries.push({ sk, idx, row, log });
-    });
+// Dropdown de tipo do quadro (preserva a escolha entre re-renders)
+function _popularFiltroTipoReunioes() {
+  const sel = document.getElementById('reunioes-tipo-filter');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Todos</option>'
+    + REUNIOES_KEYS.map(k => '<option value="'+k+'">'+escapeHtml(REUNIAO_TIPO[k])+'</option>').join('');
+  sel.value = atual;
+}
+
+// Cartão de notificação de uma reunião — mesmo desenho de tarefas e rotina.
+function _reuniaoCardHtml(m) {
+  const cor  = REUNIAO_COR[m.sk] || '#6B7B8D';
+  const info = _prazoInfo(String(m.row.data||'').slice(0,10), '');
+  const tags = [{ label: m.tipo, color: cor }];
+  if (m.row.hora)                                  tags.push({ label: m.row.hora });
+  if (m.row.unidade && m.row.unidade !== 'Todos')  tags.push({ label: m.row.unidade });
+  return _notifBaseHtml({
+    cor, info, tags,
+    icone:     info.late ? '!' : '📅',
+    titulo:    m.row.titulo || '(sem título)',
+    descricao: (m.row.log && m.row.log.topicos) || '',
+    onclick:   'openReuniaoModal(\'' + m.sk + '\',' + m.idx + ')',
+    title:     'Clica para abrir a reunião',
   });
-  entries.sort((a,b) => (b.row.data||'').localeCompare(a.row.data||''));
-  if (!entries.length) {
-    el.innerHTML = '<div style="color:var(--grey);padding:40px 0;text-align:center;font-size:14px">Nenhum log registado ainda.<br>Clica em 📋 numa reunião para abrir o log.</div>';
+}
+
+// Avisos: reuniões de hoje e de amanhã (mesmo pré-aviso de um dia da rotina)
+function renderReunioesAlert() {
+  const el = document.getElementById('reunioes-alert-zone');
+  if (!el) return;
+  const hoje = new Date();
+  const d0 = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  const proximas = todasReunioes()
+    .filter(m => {
+      const d = String(m.row.data||'').slice(0,10);
+      if (!d || m.estado === 'Realizada') return false;
+      const dt = new Date(d + 'T00:00:00');
+      if (isNaN(dt)) return false;
+      const dias = Math.round((dt - d0) / 86400000);
+      return dias === 0 || dias === 1;
+    })
+    .sort((a,b) => _reuniaoQuando(a.row).localeCompare(_reuniaoQuando(b.row)));
+  if (!proximas.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="margin-bottom:16px">'
+    + '<div style="font-size:10px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">'
+      + '📅 A seguir <span style="font-weight:400">('+proximas.length+')</span></div>'
+    + '<div class="notif-list">' + proximas.map(_reuniaoCardHtml).join('') + '</div>'
+    + '</div>';
+}
+
+// Quadro: Agendadas | Por fechar | Realizadas
+let _reuniaoPage = { 'Agendada':1, 'Por fechar':1, 'Realizada':1 };
+const REUNIAO_PAGE_SIZE = 8;
+function setReuniaoPage(estado, p) { _reuniaoPage[estado] = p; renderReunioesKanban(); }
+
+function renderReunioesKanban() {
+  const cont = document.getElementById('reunioes-kanban');
+  if (!cont) return;
+  const filtroSel = document.getElementById('reunioes-tipo-filter');
+  const filtro = filtroSel ? filtroSel.value : '';
+  let todas = todasReunioes();
+  if (filtro) todas = todas.filter(m => m.sk === filtro);
+
+  cont.innerHTML = REUNIAO_ESTADOS.map(estado => {
+    const cor = REUNIAO_EST_COR[estado];
+    let lista = todas.filter(m => m.estado === estado);
+    // Agendadas: a mais próxima primeiro. As outras: a mais recente primeiro.
+    lista.sort((a,b) => estado === 'Agendada'
+      ? _reuniaoQuando(a.row).localeCompare(_reuniaoQuando(b.row))
+      : _reuniaoQuando(b.row).localeCompare(_reuniaoQuando(a.row)));
+
+    const total = lista.length;
+    const totalPages = Math.max(1, Math.ceil(total / REUNIAO_PAGE_SIZE));
+    const page = Math.min(Math.max(1, _reuniaoPage[estado] || 1), totalPages);
+    _reuniaoPage[estado] = page;
+    const slice = lista.slice((page-1)*REUNIAO_PAGE_SIZE, page*REUNIAO_PAGE_SIZE);
+
+    const cards = slice.map(m => {
+      const tipoCor = REUNIAO_COR[m.sk] || '#6B7B8D';
+      const quando  = [m.row.data ? fmtDate(m.row.data) : 'sem data', m.row.hora || ''].filter(Boolean).join(' · ');
+      const unidade = m.row.unidade && m.row.unidade !== 'Todos' ? m.row.unidade : '';
+      return '<div class="task-card'+(estado==='Por fechar'?' overdue':'')+'"'
+        + ' style="border-left-color:'+(estado==='Por fechar'?'var(--red)':tipoCor)+'"'
+        + ' onclick="openReuniaoModal(\''+m.sk+'\','+m.idx+')" title="Clica para abrir a reunião">'
+        + '<div class="t-title">'+escapeHtml(m.row.titulo || '(sem título)')+'</div>'
+        + '<div style="font-size:10px;color:'+tipoCor+';font-weight:700;margin-bottom:4px">'+escapeHtml(m.tipo)+'</div>'
+        + '<div class="t-meta"><span>'+escapeHtml(quando)+'</span><span>'+escapeHtml(unidade)+'</span></div>'
+        + '</div>';
+    }).join('');
+
+    const paginacao = totalPages > 1
+      ? '<div class="kanban-pagination">'
+        + '<button '+(page<=1?'disabled':'')+' onclick="setReuniaoPage(\''+estado+'\','+(page-1)+')">&larr;</button>'
+        + '<span>'+page+' / '+totalPages+'</span>'
+        + '<button '+(page>=totalPages?'disabled':'')+' onclick="setReuniaoPage(\''+estado+'\','+(page+1)+')">&rarr;</button>'
+        + '</div>'
+      : '';
+
+    const vazio = total === 0
+      ? '<div style="font-size:11.5px;color:var(--grey);padding:10px 0;text-align:center">'
+        + (estado==='Por fechar' ? 'Nada por fechar 🎉' : 'Nenhuma') + '</div>'
+      : '';
+
+    // "Por fechar" é o que exige acção — explicar o que significa
+    const dica = estado === 'Por fechar'
+      ? ' <span title="Já passou a data e ainda não tem ata registada" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border:1.5px solid var(--grey);color:var(--grey);border-radius:50%;font-size:8.5px;font-weight:700;cursor:help">i</span>'
+      : '';
+
+    return '<div class="kanban-col">'
+      + '<h4 style="color:'+cor+'">'+escapeHtml(estado)+dica+'<span class="n">'+total+'</span></h4>'
+      + cards + vazio + paginacao
+      + '</div>';
+  }).join('');
+}
+
+// ── Modal de reunião (criar / editar + ata) ───────────────────────────────
+// Mesmo desenho do modal de tarefa e de rotina. Junta num sítio só o que antes
+// estava dividido entre a tabela (dados) e o modal de log (ata).
+let _reuniaoModal = null;          // { sk, idx } ou null quando é nova
+let _reuniaoForm  = { sk: 'reunioesD' };
+
+function _renderReuniaoPills() {
+  const el = document.getElementById('reuniao-pills-tipo');
+  if (el) el.innerHTML = REUNIOES_KEYS.map(k =>
+    _pillHtml(REUNIAO_TIPO[k], REUNIAO_TIPO[_reuniaoForm.sk], REUNIAO_COR[k] || '#6B7B8D', 'setReuniaoTipo')).join('');
+}
+function setReuniaoTipo(label) {
+  const k = REUNIOES_KEYS.find(x => REUNIAO_TIPO[x] === label);
+  if (k) _reuniaoForm.sk = k;
+  _renderReuniaoPills();
+  _updateReuniaoPreview();
+}
+function _reuniaoFormData() {
+  const q = id => document.getElementById(id);
+  return {
+    titulo:     q('reuniao-f-titulo').value.trim(),
+    data:       q('reuniao-f-data').value,
+    hora:       q('reuniao-f-hora').value,
+    unidade:    q('reuniao-f-unidade').value,
+    convidados: q('reuniao-f-convidados').value.trim(),
+    log: {
+      topicos: q('reuniao-f-topicos').value,
+      ata:     q('reuniao-f-ata').value,
+      outros:  q('reuniao-f-outros').value,
+    },
+  };
+}
+function _updateReuniaoPreview() {
+  const prev = document.getElementById('reuniao-preview');
+  if (!prev) return;
+  const row = _reuniaoFormData();
+  const sk  = _reuniaoForm.sk;
+  prev.innerHTML = _reuniaoCardHtml({ sk, idx: -1, row, tipo: REUNIAO_TIPO[sk], estado: reuniaoEstado(row) })
+    .replace(/ onclick="[^"]*"/, '').replace(/class="notif/, 'class="notif is-static');
+  const ic = document.getElementById('reuniao-modal-icon');
+  if (ic) {
+    const c = REUNIAO_COR[sk] || '#6B7B8D';
+    ic.style.background = c + '22';
+    ic.style.color = c;
+  }
+  // O estado é deduzido (ata preenchida => Realizada) — mostrá-lo evita surpresas
+  const meta = document.getElementById('reuniao-modal-meta');
+  if (meta) {
+    const est = reuniaoEstado(row);
+    meta.innerHTML = 'Estado: <strong style="color:'+(REUNIAO_EST_COR[est]||'var(--grey)')+'">'+escapeHtml(est)+'</strong>'
+      + (est === 'Por fechar' ? ' — preenche a ata para a dar como realizada' : '');
+  }
+}
+function openReuniaoModal(sk, idx) {
+  const nova = !sk || idx === undefined || idx === null || idx < 0;
+  _reuniaoModal = nova ? null : { sk, idx };
+  const row = nova ? {} : ((state[sk] || [])[idx] || {});
+  const log = row.log || {};
+
+  document.getElementById('reuniao-modal-title').textContent = nova ? 'Nova reunião' : 'Editar reunião';
+  document.getElementById('reuniao-f-titulo').value     = row.titulo || '';
+  document.getElementById('reuniao-f-data').value       = row.data || (nova ? new Date().toISOString().slice(0,10) : '');
+  document.getElementById('reuniao-f-hora').value       = row.hora || '';
+  document.getElementById('reuniao-f-convidados').value = row.convidados || '';
+  document.getElementById('reuniao-f-topicos').value    = log.topicos || '';
+  document.getElementById('reuniao-f-ata').value        = log.ata || '';
+  document.getElementById('reuniao-f-outros').value     = log.outros || '';
+  _fillSelect(document.getElementById('reuniao-f-unidade'), ['Todos', ...UNIDADES], row.unidade || 'Todos');
+  _reuniaoForm.sk = nova ? 'reunioesD' : sk;
+  _renderReuniaoPills();
+  document.getElementById('reuniao-modal-status').textContent = '';
+  document.getElementById('reuniao-modal-del').style.display  = nova ? 'none' : '';
+  document.getElementById('reuniao-modal-gcal').style.display = nova ? 'none' : '';
+  _updateReuniaoPreview();
+
+  document.getElementById('reuniao-modal-bg').style.display = 'block';
+  setTimeout(() => document.getElementById('reuniao-f-titulo').focus(), 50);
+}
+function closeReuniaoModal() {
+  document.getElementById('reuniao-modal-bg').style.display = 'none';
+  _reuniaoModal = null;
+}
+function saveReuniaoModal() {
+  const st    = document.getElementById('reuniao-modal-status');
+  const dados = _reuniaoFormData();
+  if (!dados.titulo) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'O título é obrigatório.';
+    document.getElementById('reuniao-f-titulo').focus();
     return;
   }
-  const totalPages = Math.max(1, Math.ceil(entries.length / MEETING_LOG_PAGE_SIZE));
-  _meetingLogPage = Math.min(Math.max(1, _meetingLogPage), totalPages);
-  const pageEntries = entries.slice((_meetingLogPage-1)*MEETING_LOG_PAGE_SIZE, _meetingLogPage*MEETING_LOG_PAGE_SIZE);
-
-  const paginationHtml = totalPages > 1
-    ? '<div class="tbl-pagination" style="margin:16px 0 8px">'
-      + '<button '+(_meetingLogPage<=1?'disabled':'')+' onclick="setMeetingLogPage('+(_meetingLogPage-1)+')">← Anterior</button>'
-      + (() => { let s=''; const delta=2; for(let p=1;p<=totalPages;p++){if(p===1||p===totalPages||(p>=_meetingLogPage-delta&&p<=_meetingLogPage+delta)){s+='<button class="'+(p===_meetingLogPage?'active':'')+'" onclick="setMeetingLogPage('+p+')">'+p+'</button>';}else if(p===_meetingLogPage-delta-1||p===_meetingLogPage+delta+1){s+='<span class="pg-info">…</span>';}} return s; })()
-      + '<button '+(_meetingLogPage>=totalPages?'disabled':'')+' onclick="setMeetingLogPage('+(_meetingLogPage+1)+')">Próxima →</button>'
-      + '<span class="count" style="margin-left:8px">'+entries.length+' logs</span>'
-      + '</div>'
-    : '';
-
-  el.innerHTML = paginationHtml + pageEntries.map(({sk,idx,row,log}) => {
-    const tipo  = TIPO_LABEL[sk] || sk;
-    const color = TIPO_COLOR[sk] || '#888';
-    const meta  = [row.data ? fmtDate(row.data) : '', row.hora || '', row.unidade || ''].filter(Boolean).join(' · ');
-    const emails = (row.convidados||'').split(/[,;\n]+/).map(e=>e.trim()).filter(Boolean);
-    const convidadosHtml = emails.length ? '<div class="rlog-convidados">'+emails.map(e=>'<span class="convidado-tag" style="pointer-events:none">'+escapeHtml(e)+'</span>').join('')+'</div>' : '';
-    const section = (icon, label, text) => text ? `<div class="rlog-section"><div class="rlog-section-label">${icon} ${label}</div><div class="rlog-section-body">${escapeHtml(text)}</div></div>` : '';
-    const bodyId = 'rlog-'+sk+'-'+idx;
-    return `<div class="rlog-card">
-      <div class="rlog-card-head">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span class="rlog-badge" style="background:${color}">${tipo}</span>
-          <span class="rlog-title">${escapeHtml(row.titulo||'(sem título)')}</span>
-        </div>
-        <button class="btn-icon" title="Editar log" onclick="openMeetingLog('${sk}',${idx})" style="font-size:14px">✎</button>
-      </div>
-      ${meta ? `<div class="rlog-meta">${escapeHtml(meta)}</div>` : ''}
-      ${convidadosHtml}
-      <button id="${bodyId}-btn" onclick="toggleRlogBody('${bodyId}')" style="margin-top:8px;background:none;border:none;cursor:pointer;font-size:12px;color:var(--grey);padding:2px 0;font-family:inherit;font-weight:500;letter-spacing:.2px">▾ Ver log</button>
-      <div id="${bodyId}" style="display:none;margin-top:10px">
-        ${section('📋','Tópicos a discutir', log.topicos)}
-        ${section('📝','Ata da reunião', log.ata)}
-        ${section('➕','Outros pontos', log.outros)}
-      </div>
-    </div>`;
-  }).join('') + paginationHtml;
+  const destino = _reuniaoForm.sk;
+  if (!state[destino]) state[destino] = [];
+  if (_reuniaoModal === null) {
+    state[destino].push(dados);
+  } else if (_reuniaoModal.sk === destino) {
+    Object.assign(state[destino][_reuniaoModal.idx], dados);
+  } else {
+    // Mudou de tipo: a reunião muda de lista (as 5 listas são separadas)
+    state[_reuniaoModal.sk].splice(_reuniaoModal.idx, 1);
+    state[destino].push(dados);
+  }
+  saveState();
+  renderReunioesPanel();
+  closeReuniaoModal();
+  showBanner(_reuniaoModal === null ? '✓ Reunião criada' : '✓ Reunião atualizada', 'success');
 }
+function deleteReuniaoFromModal() {
+  if (!_reuniaoModal) return;
+  const { sk, idx } = _reuniaoModal;
+  const row = (state[sk] || [])[idx];
+  if (!row) return;
+  if (!confirm('Apagar a reunião "'+(row.titulo||'(sem título)')+'"?\n\nA ata registada também se perde. Esta acção não pode ser desfeita.')) return;
+  state[sk].splice(idx, 1);
+  saveState();
+  renderReunioesPanel();
+  closeReuniaoModal();
+  showBanner('Reunião apagada', 'success');
+}
+function gcalFromReuniaoModal() {
+  if (!_reuniaoModal) return;
+  openGcalMeeting(_reuniaoModal.sk, _reuniaoModal.idx);
+}
+// Escape fecha o modal de reunião sem guardar
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const bg = document.getElementById('reuniao-modal-bg');
+    if (bg && bg.style.display === 'block') closeReuniaoModal();
+  }
+});
 
 // ── Google Calendar — reuniões ───────────────────────────────────
 function triggerGcalIfReady(schemaKey, idx) {
