@@ -1014,12 +1014,12 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     </div>
 
     <div class="tarefa-field">
-      <label for="reuniao-f-topicos">📋 Tópicos a discutir</label>
+      <label for="reuniao-f-topicos">📋 Tópicos a discutir <span style="font-weight:400;text-transform:none;letter-spacing:0">— a agenda, antes da reunião</span></label>
       <textarea id="reuniao-f-topicos" rows="3" placeholder="• Ponto 1&#10;• Ponto 2" oninput="_updateReuniaoPreview()"></textarea>
     </div>
 
     <div class="tarefa-field">
-      <label for="reuniao-f-ata">📝 Ata da reunião</label>
+      <label for="reuniao-f-ata">📝 Ata da reunião <span style="font-weight:400;text-transform:none;letter-spacing:0">— marca-a como realizada</span></label>
       <textarea id="reuniao-f-ata" rows="5" placeholder="O que foi discutido e decidido. Preencher aqui marca a reunião como realizada." oninput="_updateReuniaoPreview()"></textarea>
     </div>
 
@@ -1887,9 +1887,16 @@ function _userIsInteracting() {
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) {
     return true;
   }
-  // Se houver algum modal/dialog visível, também não interromper
-  const modal = document.querySelector('.modal-overlay:not([hidden]), .meeting-log-modal, [role="dialog"]:not([hidden])');
-  if (modal && modal.offsetParent !== null) return true;
+  // Se houver algum modal aberto, não interromper: o sync do servidor substitui
+  // o state inteiro, e os modais guardam índices para as linhas que estão a
+  // editar — trocar os dados por baixo faria a edição escrever na linha errada
+  // ou perder-se. Os seletores antigos (.modal-overlay, .meeting-log-modal) não
+  // correspondiam a nenhum modal desta dashboard.
+  const abertos = [
+    ...document.querySelectorAll('.log-modal-bg'),   // tarefa, rotina, reunião
+    ...document.querySelectorAll('.modal-bg'),       // restantes (usam .show)
+  ];
+  if (abertos.some(m => m.classList.contains('show') || m.style.display === 'block')) return true;
   return false;
 }
 
@@ -3355,10 +3362,14 @@ let REUNIAO_COR   = {};
 const REUNIAO_ESTADOS = ['Agendada','Por fechar','Realizada'];
 let REUNIAO_EST_COR = {};
 
-// Tem ata preenchida? É o que marca, na prática, uma reunião como feita.
+// Tem registo do que aconteceu? É o que marca uma reunião como feita.
+// ATENÇÃO: os "tópicos a discutir" são a AGENDA — escrevem-se ANTES da reunião,
+// muitas vezes no momento em que ela é criada. Contá-los aqui fazia com que uma
+// reunião marcada para amanhã aparecesse logo como realizada.
+// Só a ata e os "outros pontos" (follow-ups) são registo posterior.
 function reuniaoTemAta(row) {
   const l = row && row.log;
-  return !!(l && (String(l.topicos||'').trim() || String(l.ata||'').trim() || String(l.outros||'').trim()));
+  return !!(l && (String(l.ata||'').trim() || String(l.outros||'').trim()));
 }
 // Estado sem exigir campo novo nos dados existentes:
 //   Realizada  → tem ata, ou foi marcada à mão
@@ -8246,6 +8257,7 @@ function saveReuniaoModal() {
     return;
   }
   const destino = _reuniaoForm.sk;
+  const nova    = _reuniaoModal === null;   // ler ANTES de closeReuniaoModal() limpar
   if (!state[destino]) state[destino] = [];
   if (_reuniaoModal === null) {
     state[destino].push(dados);
@@ -8261,7 +8273,7 @@ function saveReuniaoModal() {
   // A Dashboard mostra as reuniões de hoje/amanhã — actualizar se estiver aberta
   if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
   closeReuniaoModal();
-  showBanner(_reuniaoModal === null ? '✓ Reunião criada' : '✓ Reunião atualizada', 'success');
+  showBanner(nova ? '✓ Reunião criada' : '✓ Reunião atualizada', 'success');
 }
 function deleteReuniaoFromModal() {
   if (!_reuniaoModal) return;
