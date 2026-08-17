@@ -432,6 +432,9 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 .notif-when{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap;padding-top:2px}
 .notif.is-late{background:var(--red-l);border-color:rgba(248,113,113,.35)}
 .notif.is-doing{border-left:3px solid var(--blue)}
+/* Atalho "✓ Fechar" nos cartões de reunião por fechar */
+.btn-fechar-reuniao{width:100%;margin-top:8px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--card-bg);color:var(--green);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s}
+.btn-fechar-reuniao:hover{background:var(--green);border-color:var(--green);color:#0A0A0A}
 /* Kanban da Rotina — 4 colunas (uma por frequência) */
 .kanban.kanban-4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1100px){.kanban.kanban-4{grid-template-columns:repeat(2,1fr)}}
@@ -1019,6 +1022,8 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
       <span class="log-saved" id="reuniao-modal-status"></span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
         <button id="reuniao-modal-gcal" onclick="gcalFromReuniaoModal()" style="display:none;padding:7px 14px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--dark)">📅 Calendar</button>
+        <button id="reuniao-modal-fechar" onclick="fecharReuniaoDoModal()" style="display:none;padding:7px 16px;border:1px solid var(--green);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--green)">✓ Fechar reunião</button>
+        <button id="reuniao-modal-reabrir" onclick="reabrirReuniaoDoModal()" style="display:none;padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--dark)">↩ Reabrir</button>
         <button id="reuniao-modal-del" onclick="deleteReuniaoFromModal()" style="display:none;padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--red)">Apagar</button>
         <button onclick="closeReuniaoModal()" style="padding:7px 16px;border:1px solid var(--line);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--grey)">Cancelar</button>
         <button onclick="saveReuniaoModal()" style="padding:7px 18px;border:1px solid var(--orange);border-radius:20px;background:var(--orange);color:#0A0A0A;cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700">Guardar</button>
@@ -8068,12 +8073,19 @@ function renderReunioesKanban() {
       const tipoCor = REUNIAO_COR[m.sk] || '#6B7B8D';
       const quando  = [m.row.data ? fmtDate(m.row.data) : 'sem data', m.row.hora || ''].filter(Boolean).join(' · ');
       const unidade = m.row.unidade && m.row.unidade !== 'Todos' ? m.row.unidade : '';
+      // Atalho para dar como realizada sem abrir a reunião — é a acção que
+      // interessa nesta coluna, e são muitas para fechar uma a uma pelo modal.
+      const btnFechar = estado === 'Por fechar'
+        ? '<button class="btn-fechar-reuniao" onclick="fecharReuniao(\''+m.sk+'\','+m.idx+',event)"'
+          + ' title="Dar como realizada sem escrever ata">✓ Fechar</button>'
+        : '';
       return '<div class="task-card'+(estado==='Por fechar'?' overdue':'')+'"'
         + ' style="border-left-color:'+(estado==='Por fechar'?'var(--red)':tipoCor)+'"'
         + ' onclick="openReuniaoModal(\''+m.sk+'\','+m.idx+')" title="Clica para abrir a reunião">'
         + '<div class="t-title">'+escapeHtml(m.row.titulo || '(sem título)')+'</div>'
         + '<div style="font-size:10px;color:'+tipoCor+';font-weight:700;margin-bottom:4px">'+escapeHtml(m.tipo)+'</div>'
         + '<div class="t-meta"><span>'+escapeHtml(quando)+'</span><span>'+escapeHtml(unidade)+'</span></div>'
+        + btnFechar
         + '</div>';
     }).join('');
 
@@ -8175,6 +8187,12 @@ function openReuniaoModal(sk, idx) {
   document.getElementById('reuniao-modal-status').textContent = '';
   document.getElementById('reuniao-modal-del').style.display  = nova ? 'none' : '';
   document.getElementById('reuniao-modal-gcal').style.display = nova ? 'none' : '';
+  // "Fechar" só faz sentido numa reunião por realizar; "Reabrir" só numa que
+  // foi fechada à mão. Se tem ata, é a ata que a dá como feita — não há botão.
+  const fechadaAMao = !nova && !!row.realizada;
+  const podeFechar  = !nova && !row.realizada && !reuniaoTemAta(row);
+  document.getElementById('reuniao-modal-fechar').style.display  = podeFechar  ? '' : 'none';
+  document.getElementById('reuniao-modal-reabrir').style.display = fechadaAMao ? '' : 'none';
   _updateReuniaoPreview();
 
   document.getElementById('reuniao-modal-bg').style.display = 'block';
@@ -8212,6 +8230,41 @@ function saveReuniaoModal() {
   closeReuniaoModal();
   showBanner(nova ? '✓ Reunião criada' : '✓ Reunião atualizada', 'success');
 }
+// ── Fechar / reabrir uma reunião ──────────────────────────────────────────
+// Dar como realizada sem ter de escrever a ata: há reuniões que aconteceram e
+// não deixam registo. Marca `realizada`, que reuniaoEstado() já respeita.
+function fecharReuniao(sk, idx, ev) {
+  if (ev) ev.stopPropagation();          // não abrir o modal ao clicar no botão
+  const row = (state[sk] || [])[idx];
+  if (!row) return;
+  row.realizada = true;
+  saveState();
+  renderReunioesPanel();
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+  showBanner('✓ "' + (row.titulo || 'Reunião') + '" dada como realizada', 'success');
+}
+function reabrirReuniao(sk, idx, ev) {
+  if (ev) ev.stopPropagation();
+  const row = (state[sk] || [])[idx];
+  if (!row) return;
+  delete row.realizada;
+  saveState();
+  renderReunioesPanel();
+  if (document.getElementById('panel-dashboard').classList.contains('active')) renderDashboard();
+  showBanner('Reunião reaberta', 'success');
+}
+// Botões de fechar/reabrir dentro do modal, conforme o estado da reunião
+function fecharReuniaoDoModal() {
+  if (!_reuniaoModal) return;
+  fecharReuniao(_reuniaoModal.sk, _reuniaoModal.idx);
+  closeReuniaoModal();
+}
+function reabrirReuniaoDoModal() {
+  if (!_reuniaoModal) return;
+  reabrirReuniao(_reuniaoModal.sk, _reuniaoModal.idx);
+  closeReuniaoModal();
+}
+
 function deleteReuniaoFromModal() {
   if (!_reuniaoModal) return;
   const { sk, idx } = _reuniaoModal;
