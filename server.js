@@ -130,9 +130,25 @@ function igualSeguro(a, b) {
   return crypto.timingSafeEqual(ha, hb);
 }
 
+// Diagnostico de credenciais — NAO revela a senha. Devolve so o utilizador
+// configurado, o comprimento da senha e um prefixo do seu hash, o suficiente
+// para comparar com o que foi gerado. Temporario: remover quando resolvido.
+app.get('/api/auth-info', (req, res) => {
+  res.json({
+    utilizador: AUTH_UTILIZADOR,
+    senha_definida: !!AUTH_SENHA,
+    senha_tamanho: AUTH_SENHA.length,
+    senha_tem_espacos_nas_pontas: AUTH_SENHA !== AUTH_SENHA.trim(),
+    senha_hash_prefixo: AUTH_SENHA
+      ? crypto.createHash('sha256').update(AUTH_SENHA).digest('hex').slice(0, 10)
+      : null,
+  });
+});
+
 app.use((req, res, next) => {
   if (!AUTH_SENHA) return next();            // sem senha configurada
   if (req.method === 'OPTIONS') return next(); // preflight nao leva credenciais
+  if (req.path === '/api/auth-info') return next();   // diagnostico sempre acessivel
 
   const h = req.headers.authorization || '';
   if (h.startsWith('Basic ')) {
