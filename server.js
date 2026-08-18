@@ -39,6 +39,65 @@ pool.query(`
   )
 `).catch(e => console.error('DB init error:', e.message));
 
+// ── Manutencao automatica da base de dados ────────────────────────────────
+// O estado vive num unico registo JSONB que e reescrito a cada gravacao. O
+// Postgres nao altera registos no sitio: cria uma versao nova e deixa a antiga
+// para tras. Num registo so, o autovacuum por defeito quase nunca dispara, e a
+// tabela (mais o TOAST do JSONB) incha ate consumir memoria e disco a serio.
+// Isto trata disso sozinho, sem ser preciso correr SQL a mao.
+
+async function _tamanhoTabela() {
+  const r = await pool.query(`
+    SELECT pg_total_relation_size('app_state') AS bytes,
+           COALESCE((SELECT n_dead_tup FROM pg_stat_user_tables WHERE relname='app_state'), 0) AS mortos
+  `);
+  return { bytes: Number(r.rows[0].bytes), mortos: Number(r.rows[0].mortos) };
+}
+
+const MB = 1048576;
+let _manutencaoFeita = false;
+
+async function manutencaoBD() {
+  if (_manutencaoFeita) return;
+  // 1) Fazer o autovacuum disparar mesmo numa tabela de um registo.
+  await pool.query(`
+    ALTER TABLE app_state SET (
+      autovacuum_vacuum_scale_factor = 0,
+      autovacuum_vacuum_threshold = 20,
+      autovacuum_analyze_scale_factor = 0,
+      autovacuum_analyze_threshold = 20
+    )
+  `);
+
+  const antes = await _tamanhoTabela();
+  // 2) VACUUM FULL devolve espaco ao sistema, mas tranca a tabela — so o
+  //    fazemos quando ha inchaco a serio (o arranque no Railway e frequente).
+  //    Abaixo desse limiar, um VACUUM normal chega e nao tranca nada.
+  const inchada = antes.bytes > 32 * MB || antes.mortos > 500;
+  await pool.query(inchada ? 'VACUUM (FULL, ANALYZE) app_state' : 'VACUUM (ANALYZE) app_state');
+  const depois = await _tamanhoTabela();
+
+  console.log('[db] manutencao: ' + (antes.bytes/MB).toFixed(1) + ' MB / ' + antes.mortos + ' versoes mortas'
+    + ' -> ' + (depois.bytes/MB).toFixed(1) + ' MB / ' + depois.mortos
+    + (inchada ? '  (VACUUM FULL)' : '  (VACUUM)'));
+  _manutencaoFeita = true;
+}
+
+// A base de dados pode estar indisponivel no arranque. Tenta ate conseguir, sem
+// insistir ao ponto de ser mais um peso.
+function agendarManutencao(tentativa = 1) {
+  const espera = Math.min(60000 * tentativa, 10 * 60000);
+  setTimeout(() => {
+    manutencaoBD()
+      .catch(e => {
+        console.warn('[db] manutencao adiada (tentativa ' + tentativa + '): ' + (e.message || 'base de dados inacessivel'));
+        if (tentativa < 20) agendarManutencao(tentativa + 1);
+      });
+  }, tentativa === 1 ? 15000 : espera);
+}
+agendarManutencao();
+
+
 // ── CORS ──────────────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -63,6 +122,21 @@ app.get('/api/state', async (req, res) => {
     // 503 = servico indisponivel. O cliente usa-o para avisar que esta a
     // mostrar dados locais, em vez de fingir que esta tudo bem.
     res.status(503).json({ error: e.message, db: false });
+  }
+});
+
+// Diagnostico so de leitura — nao expoe dados, so tamanhos.
+app.get('/api/db-health', async (req, res) => {
+  try {
+    const t = await _tamanhoTabela();
+    res.json({
+      db: true,
+      tabela_mb: +(t.bytes / MB).toFixed(2),
+      versoes_mortas: t.mortos,
+      manutencao_feita: _manutencaoFeita,
+    });
+  } catch (e) {
+    res.status(503).json({ db: false, error: e.message || 'base de dados inacessivel' });
   }
 });
 
