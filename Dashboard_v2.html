@@ -1906,7 +1906,19 @@ async function pullStateFromServer() {
     if (!res.ok) { _servidorOffline(true); return false; }
     _servidorOffline(false);
     const json = await res.json();
-    if (!json.data) return false;
+    if (!json.data || !Object.keys(json.data).length) {
+      // O servidor respondeu mas nao tem nada — tipicamente a base de dados
+      // acabou de ser reposta. O browser e agora a unica copia: reenvia-a, em
+      // vez de ficar a espera de uma edicao qualquer para o fazer.
+      const temDadosLocais = (state.leads||[]).length || (state.tarefas||[]).length
+        || (state.inputs||[]).length || (state.equipa||[]).length;
+      if (temDadosLocais) {
+        console.log('[sync] servidor vazio — a repor a partir deste browser');
+        _ultimoEnvio = null;          // forcar envio mesmo que nada tenha mudado
+        pushStateToServer();
+      }
+      return false;
+    }
     // Se o timestamp do servidor não mudou desde o último sync, NADA mudou — não re-renderizar
     if (_lastServerUpdatedAt && json.updated_at === _lastServerUpdatedAt) return false;
     _lastServerUpdatedAt = json.updated_at || _lastServerUpdatedAt;
@@ -6133,7 +6145,15 @@ document.getElementById("json-input").addEventListener("change",e=>{
   r.readAsText(f);
 });
 document.getElementById("btn-clear").addEventListener("click",()=>{
-  showModal("Limpar todos os dados","Apaga TUDO. Faz primeiro um Backup JSON.<br><br>Tens a certeza?",[
+  // Sem ligacao ao servidor, o browser e a unica copia dos dados: limpar aqui
+  // apaga tudo de forma irrecuperavel.
+  const semServidor = !!document.getElementById('aviso-servidor');
+  const extra = semServidor
+    ? '<br><br><strong style="color:var(--red)">O servidor esta inacessivel neste momento.</strong> '
+      + 'Estes dados so existem neste browser — se limpares agora, perdes tudo. '
+      + 'Faz o Backup JSON primeiro.'
+    : '';
+  showModal("Limpar todos os dados","Apaga TUDO. Faz primeiro um Backup JSON."+extra+"<br><br>Tens a certeza?",[
     {label:"Sim, limpar",cls:"danger",onClick:()=>{ localStorage.removeItem(STORAGE_KEY); location.reload(); }},
     {label:"Cancelar",cls:"",onClick:()=>closeModal()},
   ]);
