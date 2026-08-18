@@ -112,8 +112,11 @@ app.use((req, res, next) => {
 // ambiente DASHBOARD_PASSWORD, definida no Railway.
 // Se ainda nao estiver definida, o servidor NAO tranca (para nao deixar ninguem
 // de fora sem aviso) mas grita no arranque e avisa em cada pedido.
-const AUTH_UTILIZADOR = process.env.DASHBOARD_USER || 'thecode';
-const AUTH_SENHA      = process.env.DASHBOARD_PASSWORD || '';
+// .trim(): ao copiar/colar no painel do Railway e facil arrastar um espaco ou
+// uma quebra de linha. Uma senha que so difere por espacos nas pontas nunca e
+// intencional — e o utilizador ficaria trancado de fora sem perceber porque.
+const AUTH_UTILIZADOR = (process.env.DASHBOARD_USER || 'thecode').trim();
+const AUTH_SENHA      = (process.env.DASHBOARD_PASSWORD || '').trim();
 
 if (!AUTH_SENHA) {
   console.warn('=====================================================================');
