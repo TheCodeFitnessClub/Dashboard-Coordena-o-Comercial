@@ -168,17 +168,46 @@ app.get('/api/state', async (req, res) => {
 });
 
 // Diagnostico so de leitura — nao expoe dados, so tamanhos.
+// Que endereco esta a app a tentar? Sem isto e impossivel distinguir "a base de
+// dados esta em baixo" de "a app esta a apontar para o sitio errado".
+// Nunca expoe utilizador nem senha — so o host, a porta e o nome da base.
+function _alvoBD() {
+  const u = process.env.DATABASE_URL;
+  if (!u) return { variavel_definida: false };
+  try {
+    const x = new URL(u);
+    return {
+      variavel_definida: true,
+      host: x.hostname,
+      porta: x.port || '5432',
+      base: x.pathname.replace(/^\//, '') || '(por defeito)',
+    };
+  } catch (_) {
+    return { variavel_definida: true, host: '(DATABASE_URL mal formada)' };
+  }
+}
+
 app.get('/api/db-health', async (req, res) => {
+  const alvo = _alvoBD();
   try {
     const t = await _tamanhoTabela();
     res.json({
       db: true,
+      alvo,
       tabela_mb: +(t.bytes / MB).toFixed(2),
       versoes_mortas: t.mortos,
       manutencao_feita: _manutencaoFeita,
     });
   } catch (e) {
-    res.status(503).json({ db: false, error: e.message || 'base de dados inacessivel' });
+    const msg = e.message || 'base de dados inacessivel';
+    // Traduzir o erro para uma causa accionavel
+    let causa = 'desconhecida';
+    if (!alvo.variavel_definida)           causa = 'A variavel DATABASE_URL nao esta definida neste servico.';
+    else if (/ENOTFOUND|EAI_AGAIN/.test(msg)) causa = 'O endereco "' + alvo.host + '" nao existe na rede do projeto: os dois servicos nao estao ligados.';
+    else if (/timeout/i.test(msg))         causa = 'O endereco existe mas a base de dados nao aceita ligacoes (a arrancar, ou sem espaco).';
+    else if (/ECONNREFUSED/.test(msg))     causa = 'O servidor existe mas recusou a ligacao (porta errada ou servico parado).';
+    else if (/password|autentic/i.test(msg)) causa = 'Credenciais erradas na DATABASE_URL.';
+    res.status(503).json({ db: false, alvo, causa, error: msg });
   }
 });
 
