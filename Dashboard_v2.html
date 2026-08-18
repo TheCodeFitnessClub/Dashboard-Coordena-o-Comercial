@@ -1880,12 +1880,14 @@ async function pushStateToServer() {
     });
     if (res.ok) {
       _isDirty = false;
+      _servidorOffline(false);          // voltou a haver ligacao
       try {
         const json = await res.json();
         if (json.updated_at) _lastServerUpdatedAt = json.updated_at;
       } catch(_) {}
     }
-  } catch(e) { console.warn('[sync] push failed:', e.message); }
+    else { _servidorOffline(true); }
+  } catch(e) { console.warn('[sync] push failed:', e.message); _servidorOffline(true); }
 }
 
 async function pullStateFromServer() {
@@ -1893,8 +1895,9 @@ async function pullStateFromServer() {
   if (_isDirty) return false;            // alterações locais por guardar
   if (_userIsInteracting()) return false; // utilizador a editar / modal aberto
   try {
-    const res = await fetch('/api/state');
-    if (!res.ok) return false;
+    const res = await fetch('/api/state', { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) { _servidorOffline(true); return false; }
+    _servidorOffline(false);
     const json = await res.json();
     if (!json.data) return false;
     // Se o timestamp do servidor não mudou desde o último sync, NADA mudou — não re-renderizar
@@ -1903,7 +1906,36 @@ async function pullStateFromServer() {
     Object.assign(state, json.data);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
     return true;
-  } catch(e) { console.warn('[sync] pull failed:', e.message); return false; }
+  } catch(e) { console.warn('[sync] pull failed:', e.message); _servidorOffline(true); return false; }
+}
+
+// ── Aviso de servidor inacessivel ─────────────────────────────────────────
+// Quando o servidor nao responde, a dashboard continua a funcionar com os
+// dados guardados no browser — mas isso significa que pode estar a mostrar
+// dados antigos e que o que se escreve nao chega aos outros. Sem aviso, isso
+// e invisivel: a pagina abre normalmente e parece que perdeu trabalho.
+let _offlineDesde = null;
+function _servidorOffline(esta) {
+  if (esta && !_offlineDesde) _offlineDesde = new Date();
+  if (!esta) _offlineDesde = null;
+  const id = 'aviso-servidor';
+  let el = document.getElementById(id);
+  if (!esta) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    el.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:5000;'
+      + 'display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:var(--radius-sm);'
+      + 'background:#F8717122;border:1.5px solid #F87171;color:var(--dark);font-size:12px;'
+      + 'font-family:inherit;box-shadow:var(--card-shadow);max-width:92vw';
+    document.body.appendChild(el);
+  }
+  const hh = _offlineDesde
+    ? String(_offlineDesde.getHours()).padStart(2,'0')+':'+String(_offlineDesde.getMinutes()).padStart(2,'0')
+    : '';
+  el.innerHTML = '<span>⚠ <strong>Sem ligação ao servidor</strong> desde as '+hh+'. '
+    + 'Estás a ver e a gravar apenas neste browser — os dados podem estar desactualizados '
+    + 'e as alterações ainda não chegaram aos outros. Não limpes os dados do browser.</span>';
 }
 
 // ── Theme (dark / light) ───────────────────────────────────

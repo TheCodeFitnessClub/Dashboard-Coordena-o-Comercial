@@ -13,7 +13,17 @@ app.use(express.json({ limit: '20mb' }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  // Sem estes limites, uma base de dados inacessivel faz o pool.query() ficar
+  // pendurado para sempre: o pedido HTTP nunca termina, o browser desiste em
+  // silencio e o utilizador fica a ver dados antigos sem perceber porque.
+  // Com eles, a rota devolve erro em poucos segundos e a dashboard pode avisar.
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 30000,
+  statement_timeout: 8000,
+  query_timeout: 8000,
+  max: 5,
 });
+pool.on('error', e => console.error('[db] erro no pool:', e.message));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS app_state (
@@ -44,7 +54,9 @@ app.get('/api/state', async (req, res) => {
     res.json({ data: result.rows[0].data, updated_at: result.rows[0].updated_at });
   } catch (e) {
     console.error('GET /api/state:', e.message);
-    res.status(500).json({ error: e.message });
+    // 503 = servico indisponivel. O cliente usa-o para avisar que esta a
+    // mostrar dados locais, em vez de fingir que esta tudo bem.
+    res.status(503).json({ error: e.message, db: false });
   }
 });
 
@@ -65,7 +77,7 @@ app.post('/api/state', async (req, res) => {
     res.json({ ok: true, updated_at: result.rows[0].updated_at });
   } catch (e) {
     console.error('POST /api/state:', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ error: e.message, db: false });
   }
 });
 
