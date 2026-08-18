@@ -4,10 +4,16 @@ const http    = require('http');
 const { URL } = require('url');
 const path    = require('path');
 const { Pool } = require('pg');
-const XLSX    = require('xlsx');
+// XLSX (SheetJS) custa ~18 MB de heap so para ser carregado. O sync automatico
+// de Excel esta desligado e o import manual e raro, por isso so a carregamos
+// quando alguem a usa mesmo, em vez de pagar a memoria em cada arranque.
+let _XLSX = null;
+function getXLSX() { return _XLSX || (_XLSX = require('xlsx')); }
 
 const app = express();
-app.use(express.json({ limit: '20mb' }));
+// O estado completo anda pelos 400 KB. 3 MB da folga larga sem permitir que um
+// pedido isolado reserve dezenas de MB.
+app.use(express.json({ limit: '3mb' }));
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -214,7 +220,7 @@ function normalizeDate(v, year) {
     return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0');
   }
   if (typeof v === 'number') {
-    const d = XLSX.SSF.parse_date_code(v);
+    const d = getXLSX().SSF.parse_date_code(v);
     if (!d) return null;
     return d.y + '-' + String(d.m).padStart(2,'0') + '-' + String(d.d).padStart(2,'0');
   }
@@ -233,7 +239,7 @@ function normalizeDate(v, year) {
 // ── Parse one monthly sheet → array of inputs rows ───────────────────────────
 function parseSheet(sheet, year) {
   // 2D array (header:1 keeps positional indexing)
-  const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  const grid = getXLSX().utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
 
   // Find header row: row containing both "DATA" and "Efetuadas"
   let headerRow = -1;
@@ -301,7 +307,7 @@ async function syncClub(club) {
   if (!shareUrl) throw new Error(`${club.envVar} not set`);
 
   const buf = await downloadShared(shareUrl);
-  const wb  = XLSX.read(buf, { type: 'buffer', cellDates: true });
+  const wb  = getXLSX().read(buf, { type: 'buffer', cellDates: true });
 
   const now = new Date();
   const year = now.getFullYear();
