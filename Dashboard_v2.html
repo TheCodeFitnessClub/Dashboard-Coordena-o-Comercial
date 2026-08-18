@@ -1870,16 +1870,23 @@ function _userIsInteracting() {
   return false;
 }
 
+let _ultimoEnvio = null;   // ultimo corpo enviado com sucesso
 async function pushStateToServer() {
   if (!SERVER_SYNC) return;
+  const corpo = JSON.stringify({ data: state });
+  // Muitas accoes chamam saveState() sem mudar nada de facto (re-renders,
+  // limpezas, migracoes). Sem esta guarda, cada uma dessas gerava uma reescrita
+  // completa do documento no Postgres.
+  if (corpo === _ultimoEnvio) { _isDirty = false; return; }
   try {
     const res = await fetch('/api/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: state })
+      body: corpo
     });
     if (res.ok) {
       _isDirty = false;
+      _ultimoEnvio = corpo;             // so conta depois de o servidor aceitar
       _servidorOffline(false);          // voltou a haver ligacao
       try {
         const json = await res.json();
@@ -1976,7 +1983,10 @@ function saveState() {
   // Push para o servidor (debounced 1s — só no Railway)
   _isDirty = true;
   clearTimeout(_syncPushTimer);
-  _syncPushTimer = setTimeout(pushStateToServer, 1000);
+  // 4s em vez de 1s: agrupa rajadas de edicoes numa unica escrita. Cada escrita
+  // reescreve o documento inteiro na base de dados, por isso escrever menos
+  // vezes reduz muito o desgaste do Postgres.
+  _syncPushTimer = setTimeout(pushStateToServer, 4000);
 }
 
 // ── Guardar no ficheiro ────────────────────────────────────
