@@ -4,6 +4,7 @@ const http    = require('http');
 const { URL } = require('url');
 const path    = require('path');
 const { Pool } = require('pg');
+const crypto  = require('crypto');
 // XLSX (SheetJS) custa ~18 MB de heap so para ser carregado. O sync automatico
 // de Excel esta desligado e o import manual e raro, por isso so a carregamos
 // quando alguem a usa mesmo, em vez de pagar a memoria em cada arranque.
@@ -104,6 +105,47 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
+});
+
+// ── Autenticacao ──────────────────────────────────────────────────────────
+// A senha NUNCA vai no codigo: este repositorio e publico. Vem da variavel de
+// ambiente DASHBOARD_PASSWORD, definida no Railway.
+// Se ainda nao estiver definida, o servidor NAO tranca (para nao deixar ninguem
+// de fora sem aviso) mas grita no arranque e avisa em cada pedido.
+const AUTH_UTILIZADOR = process.env.DASHBOARD_USER || 'thecode';
+const AUTH_SENHA      = process.env.DASHBOARD_PASSWORD || '';
+
+if (!AUTH_SENHA) {
+  console.warn('=====================================================================');
+  console.warn(' ATENCAO: DASHBOARD_PASSWORD nao esta definida.');
+  console.warn(' A dashboard esta ACESSIVEL A QUALQUER PESSOA que saiba o endereco.');
+  console.warn(' Define a variavel no Railway para a proteger.');
+  console.warn('=====================================================================');
+}
+
+// Comparacao em tempo constante: evita revelar a senha pelo tempo de resposta.
+function igualSeguro(a, b) {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
+app.use((req, res, next) => {
+  if (!AUTH_SENHA) return next();            // sem senha configurada
+  if (req.method === 'OPTIONS') return next(); // preflight nao leva credenciais
+
+  const h = req.headers.authorization || '';
+  if (h.startsWith('Basic ')) {
+    let u = '', p = '';
+    try {
+      const dec = Buffer.from(h.slice(6), 'base64').toString('utf8');
+      const i = dec.indexOf(':');
+      u = dec.slice(0, i); p = dec.slice(i + 1);
+    } catch (_) {}
+    if (igualSeguro(u, AUTH_UTILIZADOR) && igualSeguro(p, AUTH_SENHA)) return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="The Code - Coordenacao", charset="UTF-8"');
+  res.status(401).type('text/plain; charset=utf-8').send('Autenticacao necessaria.');
 });
 
 // ── Serve o dashboard ─────────────────────────────────────────────────────────
