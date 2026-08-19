@@ -733,7 +733,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 <button id="btn-export-xlsx" style="display:none"></button>
 <button id="btn-export-json" style="display:none"></button>
 <button id="btn-import-json" style="display:none"></button>
-<button id="btn-clear" style="display:none"></button>
 
 <main>
 
@@ -1244,7 +1243,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <button id="btn-export-xlsx-cfg" style="padding:8px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-weight:500;color:var(--dark);font-family:inherit">⬇ Exportar XLSX</button>
     <button id="btn-export-json-cfg" style="padding:8px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-weight:500;color:var(--dark);font-family:inherit">⬇ Backup JSON</button>
     <button id="btn-import-json-cfg" style="padding:8px 18px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-weight:500;color:var(--dark);font-family:inherit">⬆ Restaurar JSON</button>
-    <button id="btn-clear-cfg" style="padding:8px 18px;border:1.5px solid var(--red);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);cursor:pointer;font-weight:600;color:var(--red);font-family:inherit">🗑 Limpar tudo</button>
   </div>
 </section>
 
@@ -6123,13 +6121,6 @@ document.getElementById("json-input").addEventListener("change",e=>{
   };
   r.readAsText(f);
 });
-document.getElementById("btn-clear").addEventListener("click",()=>{
-  showModal("Limpar todos os dados","Apaga TUDO. Faz primeiro um Backup JSON.<br><br>Tens a certeza?",[
-    {label:"Sim, limpar",cls:"danger",onClick:()=>{ localStorage.removeItem(STORAGE_KEY); location.reload(); }},
-    {label:"Cancelar",cls:"",onClick:()=>closeModal()},
-  ]);
-});
-
 // ── Botões Definições → delegam nos handlers originais (hidden) ──
 document.getElementById("file-input-cfg").addEventListener("change", e => {
   // Clone the event to the original handler by copying files
@@ -6143,7 +6134,6 @@ document.getElementById("file-input-cfg").addEventListener("change", e => {
 document.getElementById("btn-export-xlsx-cfg").addEventListener("click", () => document.getElementById("btn-export-xlsx").click());
 document.getElementById("btn-export-json-cfg").addEventListener("click", () => document.getElementById("btn-export-json").click());
 document.getElementById("btn-import-json-cfg").addEventListener("click", () => document.getElementById("json-input").click());
-document.getElementById("btn-clear-cfg").addEventListener("click",    () => document.getElementById("btn-clear").click());
 
 // ── Sidebar footer config button → tab system ───────────────
 document.getElementById("sidebar-config-btn").addEventListener("click", () => {
