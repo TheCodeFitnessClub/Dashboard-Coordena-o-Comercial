@@ -7081,9 +7081,11 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       // (c) Notas para tempos precisos — só leads novas ou note-based sem 1.º contacto.
       if (!ex) {
         needsNotesNew.push(al.id);
-      } else if (ex._nb && (!String(ex.dataPrimeiroContacto || '').trim()
-                         || !String(ex.dataEntrada || '').trim())) {
-        // ainda sem 1.o contacto OU ainda sem entrada (por atribuir)
+      } else if (!String(ex.dataEntrada || '').trim()
+              || (ex._nb && !String(ex.dataPrimeiroContacto || '').trim())) {
+        // Sem data de entrada -> SEMPRE reler as notas, tenha ou nao a marca _nb:
+        // e a unica forma de descobrir a passagem ao comercial. (Leads antigas
+        // nao tem _nb; exigi-lo deixaria essas por reparar para sempre.)
         needsNotesPend.push(al.id);
       }
     }
