@@ -12,9 +12,11 @@ let _XLSX = null;
 function getXLSX() { return _XLSX || (_XLSX = require('xlsx')); }
 
 const app = express();
-// O estado completo anda pelos 400 KB. 3 MB da folga larga sem permitir que um
-// pedido isolado reserve dezenas de MB.
-app.use(express.json({ limit: '3mb' }));
+// O estado completo ronda os 11 MB (as leads sao a maior parte) e cresce com o
+// tempo. NAO baixar este limite sem medir o tamanho real em producao: se ficar
+// abaixo do estado actual, TODAS as gravacoes passam a ser recusadas com 413 e
+// a dashboard deixa de guardar sem dar sinal.
+app.use(express.json({ limit: '64mb' }));
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pool = new Pool({
