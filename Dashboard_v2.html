@@ -7994,6 +7994,12 @@ if (SERVER_SYNC) {
   });
   // Polling a cada 30 segundos — mantém todos os utilizadores sincronizados
   setInterval(async () => {
+    // Se houver alteracoes locais por enviar — tipicamente porque o envio
+    // falhou durante uma quebra de ligacao — reenvia-las PRIMEIRO. Sem isto
+    // ficava um impasse: _isDirty bloqueia o pull, e o push so acontecia na
+    // proxima edicao. A aplicacao deixava de sincronizar sozinha e o aviso de
+    // "sem ligacao ao servidor" nunca mais desaparecia.
+    if (_isDirty) await pushStateToServer();
     const changed = await pullStateFromServer();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   }, 30000);
