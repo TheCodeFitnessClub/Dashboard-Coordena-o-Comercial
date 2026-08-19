@@ -1665,24 +1665,21 @@ function loadState() {
     let raw = localStorage.getItem(STORAGE_KEY);
 
     // 2 — Migrar de chaves antigas (versões anteriores do ficheiro)
+    // Só leitura — já não escrevemos no localStorage (o servidor é a fonte
+    // única; o estado real passa dos 10MB, acima do limite do localStorage).
     if (!raw) {
       const legacyKeys = ["thecode_workflow_v30","thecode_workflow_v21","thecode_workflow_v20"];
       for (const k of legacyKeys) {
         const found = localStorage.getItem(k);
-        if (found) {
-          raw = found;
-          localStorage.setItem(STORAGE_KEY, raw); // migra para chave estável
-          localStorage.removeItem(k);              // limpa a antiga
-          break;
-        }
+        if (found) { raw = found; break; }
       }
     }
 
-    // 3 — Fallback: dados embutidos no próprio ficheiro HTML (SAVED_STATE)
+    // 3 — Fallback: dados embutidos no próprio ficheiro HTML (SAVED_STATE).
+    // Serve só de pintura instantânea antes do pull ao servidor responder —
+    // pode estar desatualizado, e por isso não é guardado.
     if (!raw && SAVED_STATE) {
       raw = JSON.stringify(SAVED_STATE);
-      // Guarda imediatamente no localStorage para sessões futuras
-      try { localStorage.setItem(STORAGE_KEY, raw); } catch(_) {}
     }
 
     if (raw) {
@@ -1873,6 +1870,7 @@ function _userIsInteracting() {
 let _ultimoEnvio = null;   // ultimo corpo enviado com sucesso
 async function pushStateToServer() {
   if (!SERVER_SYNC) return;
+  const el = document.getElementById('save-status');
   const corpo = JSON.stringify({ data: state });
   // Muitas accoes chamam saveState() sem mudar nada de facto (re-renders,
   // limpezas, migracoes). Sem esta guarda, cada uma dessas gerava uma reescrita
@@ -1887,12 +1885,18 @@ async function pushStateToServer() {
     if (res.ok) {
       _isDirty = false;
       _ultimoEnvio = corpo;             // so conta depois de o servidor aceitar
+      if (el) { el.textContent = "✓ Guardado às " + new Date().toLocaleTimeString("pt-PT"); el.classList.add("saved"); }
       try {
         const json = await res.json();
         if (json.updated_at) _lastServerUpdatedAt = json.updated_at;
       } catch(_) {}
+    } else if (el) {
+      el.textContent = "⚠ Erro ao guardar no servidor"; el.classList.remove("saved");
     }
-  } catch(e) { console.warn('[sync] push failed:', e.message); }
+  } catch(e) {
+    console.warn('[sync] push failed:', e.message);
+    if (el) { el.textContent = "⚠ Erro ao guardar no servidor"; el.classList.remove("saved"); }
+  }
 }
 
 async function pullStateFromServer() {
@@ -1920,7 +1924,6 @@ async function pullStateFromServer() {
     if (_lastServerUpdatedAt && json.updated_at === _lastServerUpdatedAt) return false;
     _lastServerUpdatedAt = json.updated_at || _lastServerUpdatedAt;
     Object.assign(state, json.data);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
     return true;
   } catch(e) { console.warn('[sync] pull failed:', e.message); return false; }
 }
@@ -1949,25 +1952,31 @@ function loadTheme() {
   _applyThemeBtns(theme);
 }
 function saveNow() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
+  // Chamado no beforeunload. Sem localStorage já não há gravação local a
+  // fazer — despacha imediatamente o que estiver pendente para o servidor.
+  // Best-effort: o browser pode fechar antes da resposta chegar, mas é melhor
+  // do que nada, e nada aqui pode falhar por falta de espaço.
+  if (_isDirty && SERVER_SYNC) { clearTimeout(_syncPushTimer); pushStateToServer(); }
 }
 function saveState() {
   clearTimeout(saveTimer);
   const el = document.getElementById("save-status");
   el.textContent = "A guardar..."; el.classList.remove("saved");
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      el.textContent = "✓ Guardado às " + new Date().toLocaleTimeString("pt-PT");
-      el.classList.add("saved");
-    } catch(e) { el.textContent = "⚠ Erro (localStorage cheio?)"; }
-  }, 250);
-  // Push para o servidor (debounced 1s — só no Railway)
   _isDirty = true;
   clearTimeout(_syncPushTimer);
-  // 4s em vez de 1s: agrupa rajadas de edicoes numa unica escrita. Cada escrita
-  // reescreve o documento inteiro na base de dados, por isso escrever menos
-  // vezes reduz muito o desgaste do Postgres.
+  if (!SERVER_SYNC) {
+    // Sem servidor (ex: ficheiro aberto localmente, fora do Railway) não há
+    // onde guardar. Diz isso claramente em vez de fingir que gravou.
+    saveTimer = setTimeout(() => {
+      el.textContent = "✓ Sessão (sem servidor — usa Backup JSON)";
+      el.classList.add("saved");
+    }, 250);
+    return;
+  }
+  // 4s: agrupa rajadas de edições numa única escrita. Cada escrita reescreve
+  // o documento inteiro na base de dados, por isso escrever menos vezes
+  // reduz muito o desgaste do Postgres. O indicador só passa a "Guardado"
+  // quando o servidor confirmar — ver pushStateToServer().
   _syncPushTimer = setTimeout(pushStateToServer, 4000);
 }
 
