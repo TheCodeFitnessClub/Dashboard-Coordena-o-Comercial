@@ -7353,15 +7353,38 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // não porque foi apagada no Closum.
     if (!isPeriodSync && allApiLeads.length > 0) {
       const closumIds = new Set(allApiLeads.map(l => 'CLO-' + l.id));
-      const beforeApag = state.leads.length;
-      state.leads = state.leads.filter(l => {
-        if (!l.leadId) return true; // leads manuais ficam sempre
-        const entradaMs = l.dataEntrada ? new Date(String(l.dataEntrada).replace(' ','T')).getTime() : 0;
-        if (!entradaMs || entradaMs < startTs) return true; // fora da janela → preservar
-        return closumIds.has(l.leadId); // dentro da janela: só fica se ainda existe no Closum
-      });
-      removedApagadas = beforeApag - state.leads.length;
-      if (removedApagadas > 0) {
+      // Leads que a eliminação pode atingir: vieram do Closum e estão na janela.
+      const naJanela = l => {
+        if (!l.leadId) return false;                        // manuais nunca
+        const t = l.dataEntrada ? new Date(String(l.dataEntrada).replace(' ','T')).getTime() : 0;
+        return !!t && t >= startTs;                         // fora da janela nunca
+      };
+      const candidatas = state.leads.filter(naJanela);
+      const aApagar    = candidatas.filter(l => !closumIds.has(l.leadId));
+
+      // ── Guarda de sanidade contra recolhas incompletas ──────────────────
+      // A recolha do Closum é paginada (~32 páginas). Se parar a meio sem dar
+      // erro, allApiLeads fica truncada e TODAS as leads em falta seriam lidas
+      // como "apagadas no Closum" — centenas de registos perdidos em silêncio.
+      // Só confiamos na eliminação em massa se a recolha parecer completa:
+      // o número de leads recebidas tem de ser compatível com o que já temos.
+      // Eliminações pequenas passam sempre — são rotina e não indicam truncagem.
+      const MAX_SEM_VERIFICAR = 25;   // até aqui, é operação normal
+      const RACIO_MINIMO      = 0.8;  // acima disso, exigir recolha aparentemente completa
+      const racio = candidatas.length ? (allApiLeads.length / candidatas.length) : 1;
+      const recolhaSuspeita = aApagar.length > MAX_SEM_VERIFICAR && racio < RACIO_MINIMO;
+
+      if (recolhaSuspeita) {
+        console.warn('[Closum sync] Eliminação BLOQUEADA: recolha parece incompleta — '
+          + allApiLeads.length + ' leads recebidas para ' + candidatas.length + ' na janela ('
+          + Math.round(racio*100) + '%). Seriam apagadas ' + aApagar.length + ' leads.');
+        // Isto é raro e significa que o sync está a falhar: vale um aviso.
+        showBanner('⚠ Sync incompleto — eliminação de ' + aApagar.length
+          + ' leads bloqueada por segurança. Tenta a sincronização completa.', 'error');
+      } else if (aApagar.length) {
+        const idsApagar = new Set(aApagar.map(l => l.leadId));
+        state.leads = state.leads.filter(l => !idsApagar.has(l.leadId));
+        removedApagadas = aApagar.length;
         console.log('[Closum sync] Removidas', removedApagadas, 'leads que já não existem no Closum (apagadas lá)');
       }
     }
