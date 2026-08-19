@@ -3133,6 +3133,13 @@ function updateCell(schemaKey, idx, key, value) {
   const f = SCHEMA[schemaKey].fields.find(x=>x.key===key);
   if (f&&f.type==="number") state[schemaKey][idx][key] = value===""?null:Number(value);
   else state[schemaKey][idx][key] = value;
+  // Marcar o campo como editado a mao. O sync do Closum consulta esta marca e
+  // nunca sobrepoe o que foi corrigido aqui — uma correccao manual e sempre
+  // mais autoritativa do que o valor automatico.
+  if (schemaKey === "leads") {
+    const linha = state.leads[idx];
+    if (linha) { linha._manual = Object.assign({}, linha._manual, { [key]: true }); }
+  }
   saveState();
   // Rotina: ao mudar a frequência, um dia que já não faça sentido é descartado
   // (ex: "2ªf" ao passar para Mensal). A rotina edita-se pelo modal, mas isto
@@ -7290,11 +7297,13 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
         // manualmente). O sync nunca a sobrepõe.
         // dataCriacao (data real do Closum) pode ser preenchida/atualizada —
         // só afeta as contagens, não o tempo de resposta.
-        if (ex.dataCriacao !== dataCriacao) { ex.dataCriacao = dataCriacao; changed = true; }
+        // Campos corrigidos a mao ficam permanentes — ver updateCell().
+        const manual = k => !!(ex._manual && ex._manual[k]);
+        if (!manual('dataCriacao') && ex.dataCriacao !== dataCriacao) { ex.dataCriacao = dataCriacao; changed = true; }
         // Excepcao a imutabilidade: se a entrada ainda esta VAZIA (lead por
         // atribuir), preenche-la assim que a passagem ao comercial aparecer.
         // Uma entrada ja preenchida continua intocavel.
-        if (!String(ex.dataEntrada || '').trim()) {
+        if (!manual('dataEntrada') && !String(ex.dataEntrada || '').trim()) {
           const ndE = notesMap[al.id];
           if (ndE && ndE.passagem) { ex.dataEntrada = adjustEntradaHorario(ndE.passagem); changed = true; }
         }
@@ -7305,7 +7314,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
         // — manual ou de sync anterior — é IMUTÁVEL pelo sync automático.
         // ════════════════════════════════════════════════════════════════════
         const dpcExistente = ex.dataPrimeiroContacto && String(ex.dataPrimeiroContacto).trim();
-        if (!dpcExistente) {
+        if (!dpcExistente && !manual('dataPrimeiroContacto')) {
           if (ex._nb) {
             // Lead note-based: 1.º contacto = 1ª mudança de estado (Histórico da Lead).
             const nd = notesMap[al.id];
@@ -7320,14 +7329,16 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
             }
           }
         }
-        if (ex.sequencia !== seqResultado) {
+        if (!manual('sequencia') && ex.sequencia !== seqResultado) {
           ex.sequencia = seqResultado;
           changed = true;
         }
         // dataFecho segue sempre o estado ATUAL da sequência no Closum:
         //  · Fechada → sobrepõe com seqTs (data da última alteração no Closum).
         //  · Reaberta (deixou de estar fechada) → limpa o dataFecho existente.
-        if (isClosedSeq(seqResultado)) {
+        if (manual('dataFecho')) {
+          // fechado a mao — nao mexer
+        } else if (isClosedSeq(seqResultado)) {
           const novoDataFecho = seqTs || ex.dataFecho || ex.dataPrimeiroContacto || ex.dataEntrada || '';
           if (novoDataFecho && ex.dataFecho !== novoDataFecho) {
             ex.dataFecho = novoDataFecho;
@@ -7338,11 +7349,11 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
           changed = true;
         }
         const novoComercial = closumUserToComercial(userMap[al.user_id]);
-        if (novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
-        if (motivoPerdido && ex.motivoPerdido !== motivoPerdido) { ex.motivoPerdido = motivoPerdido; changed = true; }
+        if (!manual('comercial') && novoComercial && ex.comercial !== novoComercial) { ex.comercial = novoComercial; changed = true; }
+        if (!manual('motivoPerdido') && motivoPerdido && ex.motivoPerdido !== motivoPerdido) { ex.motivoPerdido = motivoPerdido; changed = true; }
         // Só atualiza source se REALMENTE encontrámos uma neste sync (listing ou detalhe).
         // Se source é '' (não veio nada nesta iteração), preservamos o valor já guardado.
-        if (source && ex.source !== source) { ex.source = source; changed = true; }
+        if (!manual('source') && source && ex.source !== source) { ex.source = source; changed = true; }
         if (changed) atualizadas++;
       } else {
         // Lead NOVA → tempos precisos a partir do Histórico da Lead (notas):
