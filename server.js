@@ -42,6 +42,42 @@ pool.query(`
   )
 `).catch(e => console.error('DB init error:', e.message));
 
+// ── Backups automaticos ───────────────────────────────────────────────────
+// Um retrato diario do estado, guardado na propria base de dados. Sem isto, a
+// unica copia e a do momento — se um erro so for detectado dias depois, ou se a
+// base de dados se perder, nao ha para onde voltar. Com o estado nos ~1 MB,
+// 30 dias custam ~30 MB.
+pool.query(`
+  CREATE TABLE IF NOT EXISTS app_state_historico (
+    id         SERIAL PRIMARY KEY,
+    dia        DATE NOT NULL UNIQUE,
+    data       JSONB NOT NULL,
+    criado_em  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(e => console.error('[backup] init:', e.message));
+
+const DIAS_HISTORICO = 30;
+
+async function guardarBackupDiario() {
+  // ON CONFLICT: um retrato por dia; o do proprio dia vai sendo actualizado
+  // para o mais recente, de modo a que o de "ontem" fique estavel.
+  const r = await pool.query(`
+    INSERT INTO app_state_historico (dia, data)
+    SELECT CURRENT_DATE, data FROM app_state WHERE id = 1
+    ON CONFLICT (dia) DO UPDATE SET data = EXCLUDED.data, criado_em = NOW()
+    RETURNING dia
+  `);
+  if (!r.rowCount) return;                      // ainda nao ha estado nenhum
+  const del = await pool.query(
+    `DELETE FROM app_state_historico WHERE dia < CURRENT_DATE - $1::int`, [DIAS_HISTORICO]);
+  console.log('[backup] retrato de ' + r.rows[0].dia.toISOString().slice(0,10)
+    + ' guardado' + (del.rowCount ? ' (' + del.rowCount + ' antigos removidos)' : ''));
+}
+
+// Uma vez por hora: barato, e garante um retrato mesmo que o servico reinicie.
+setInterval(() => { guardarBackupDiario().catch(e => console.warn('[backup] falhou:', e.message)); }, 60 * 60 * 1000);
+setTimeout(() => { guardarBackupDiario().catch(e => console.warn('[backup] falhou:', e.message)); }, 45000);
+
 // ── Manutencao automatica da base de dados ────────────────────────────────
 // O estado vive num unico registo JSONB que e reescrito a cada gravacao. O
 // Postgres nao altera registos no sitio: cria uma versao nova e deixa a antiga
@@ -213,6 +249,35 @@ app.get('/api/db-health', async (req, res) => {
     else if (/ECONNREFUSED/.test(msg))     causa = 'O servidor existe mas recusou a ligacao (porta errada ou servico parado).';
     else if (/password|autentic/i.test(msg)) causa = 'Credenciais erradas na DATABASE_URL.';
     res.status(503).json({ db: false, alvo, causa, error: msg });
+  }
+});
+
+// Retratos disponiveis (so metadados — nao devolve os dados).
+app.get('/api/backups', async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT dia, criado_em, pg_column_size(data) AS bytes
+      FROM app_state_historico ORDER BY dia DESC
+    `);
+    res.json({ backups: r.rows.map(x => ({
+      dia: x.dia.toISOString().slice(0,10),
+      guardado_em: x.criado_em,
+      tamanho_mb: +(Number(x.bytes) / 1048576).toFixed(2),
+    })) });
+  } catch (e) {
+    res.status(503).json({ error: e.message || 'base de dados inacessivel' });
+  }
+});
+
+// Descarregar o retrato de um dia (para inspeccionar ou repor manualmente).
+app.get('/api/backups/:dia', async (req, res) => {
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(req.params.dia)) return res.status(400).json({ error: 'dia invalido' });
+    const r = await pool.query('SELECT data FROM app_state_historico WHERE dia = $1', [req.params.dia]);
+    if (!r.rows.length) return res.status(404).json({ error: 'sem retrato nesse dia' });
+    res.json({ dia: req.params.dia, data: r.rows[0].data });
+  } catch (e) {
+    res.status(503).json({ error: e.message || 'base de dados inacessivel' });
   }
 });
 
