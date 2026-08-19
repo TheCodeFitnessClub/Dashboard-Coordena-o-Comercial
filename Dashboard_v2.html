@@ -385,25 +385,6 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 @media(max-width:1100px){.kanban{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.kanban{grid-template-columns:1fr}}
 /* ── Ficheiros ── */
-.fich-upload-zone{border:2px dashed var(--line);border-radius:var(--radius);padding:36px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:24px;background:var(--card-bg)}
-.fich-upload-zone:hover,.fich-upload-zone.drag-over{border-color:var(--orange);background:rgba(249,115,22,.04)}
-.fich-upload-zone .fich-upload-icon{font-size:32px;margin-bottom:8px}
-.fich-upload-zone p{margin:4px 0;color:var(--grey);font-size:13px}
-.fich-upload-zone p strong{color:var(--orange);cursor:pointer}
-.fich-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
-.fich-card{background:var(--card-bg);border-radius:var(--radius);padding:16px;box-shadow:var(--card-shadow);display:flex;flex-direction:column;gap:8px;transition:box-shadow .2s;position:relative}
-.fich-card:hover{box-shadow:var(--card-shadow-hover)}
-.fich-card-icon{font-size:36px;text-align:center;padding:8px 0}
-.fich-card-name{font-size:13px;font-weight:600;color:var(--dark);word-break:break-word;text-align:center;line-height:1.4}
-.fich-card-meta{font-size:11px;color:var(--grey);text-align:center}
-.fich-card-actions{display:flex;gap:6px;margin-top:4px}
-.fich-card-actions button{flex:1;padding:5px 0;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:11px;font-weight:600;cursor:pointer;background:var(--card-bg);color:var(--dark);font-family:inherit;transition:all .15s}
-.fich-card-actions button:hover{border-color:var(--orange);color:var(--orange)}
-.fich-card-actions button.del:hover{border-color:var(--red);color:var(--red)}
-.fich-search{padding:7px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:13px;background:var(--card-bg);color:var(--dark);font-family:inherit;width:100%;max-width:320px;margin-bottom:16px}
-.fich-empty{text-align:center;padding:60px 20px;color:var(--grey)}
-.fich-empty .fich-empty-icon{font-size:48px;margin-bottom:12px}
-.fich-size-warn{font-size:11px;color:var(--orange);margin-top:2px;text-align:center}
 .kanban-col{background:var(--card-bg);border:none;border-radius:var(--radius);padding:14px;min-height:220px;box-shadow:var(--card-shadow)}
 .kanban-col h4{margin:0 0 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--grey);font-weight:700}
 .kanban-col h4 .n{background:var(--grey-l);color:var(--grey);padding:2px 8px;border-radius:20px;font-size:10px;margin-left:6px;font-weight:700}
@@ -679,7 +660,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <button class="sidebar-nav-item" data-tab="closum"><span class="nav-icon">📇</span>CRM - Closum</button>
     <button class="sidebar-nav-item" data-tab="tarefas"><span class="nav-icon">✓</span>Tarefas</button>
     <button class="sidebar-nav-item" data-tab="reunioes"><span class="nav-icon">📅</span>Reuniões</button>
-    <button class="sidebar-nav-item" data-tab="ficheiros"><span class="nav-icon">🗂</span>Ficheiros</button>
     <div class="sidebar-section-label">Clientes</div>
     <button class="sidebar-nav-item" data-tab="socios"><span class="nav-icon">👥</span>Sócios</button>
 <div class="sidebar-section-label">Vendas</div>
@@ -881,17 +861,6 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
 <!-- ══════════════════════════════════════════
      FICHEIROS
 ══════════════════════════════════════════ -->
-<section class="panel" id="panel-ficheiros">
-  <h2 class="section">Ficheiros</h2>
-  <div class="fich-upload-zone" id="fich-drop-zone" onclick="document.getElementById('fich-file-input').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="fichOnDrop(event)">
-    <input type="file" id="fich-file-input" multiple style="display:none" onchange="fichOnSelect(this.files)">
-    <div class="fich-upload-icon">📂</div>
-    <p><strong>Clica para escolher</strong> ou arrasta ficheiros para aqui</p>
-    <p>Qualquer tipo de ficheiro · Máx. 20 MB por ficheiro</p>
-  </div>
-  <input type="text" class="fich-search" id="fich-search" placeholder="🔍  Pesquisar ficheiros..." oninput="renderFicheiros()">
-  <div id="fich-grid"></div>
-</section>
 
 <!-- ══════════════════════════════════════════
      TAREFAS
@@ -1642,7 +1611,6 @@ let state = {
   reunioesD:[], reunioesS:[], reunioesM:[], reunioesC:[], reunioesDir:[],
   kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
-  ficheiros:[],
   deletedLeadIds:[], deletedLeads:[],
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
@@ -1709,124 +1677,6 @@ function loadState() {
   } catch(e) { console.warn("Falha localStorage:", e); }
 }
 // ── Ficheiros ──────────────────────────────────────────────────────────────
-function fichIcon(type) {
-  if (!type) return '📎';
-  if (type.startsWith('image/'))  return '🖼️';
-  if (type === 'application/pdf') return '📄';
-  if (type.includes('word'))      return '📝';
-  if (type.includes('excel') || type.includes('spreadsheet') || type.includes('csv')) return '📊';
-  if (type.includes('presentation') || type.includes('powerpoint')) return '📑';
-  if (type.startsWith('video/'))  return '🎬';
-  if (type.startsWith('audio/'))  return '🎵';
-  if (type.startsWith('text/'))   return '📋';
-  if (type.includes('zip') || type.includes('rar') || type.includes('7z')) return '🗜️';
-  return '📎';
-}
-function fichFmtSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
-  return (bytes/(1024*1024)).toFixed(1) + ' MB';
-}
-function fichFmtDate(iso) {
-  try { return new Date(iso).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
-  catch { return iso; }
-}
-function fichOnDrop(e) {
-  e.preventDefault();
-  document.getElementById('fich-drop-zone').classList.remove('drag-over');
-  fichOnSelect(e.dataTransfer.files);
-}
-function fichOnSelect(files) {
-  const MAX = 20 * 1024 * 1024; // 20 MB
-  Array.from(files).forEach(file => {
-    if (file.size > MAX) { showBanner('⚠ "' + file.name + '" excede 20 MB e foi ignorado', 'error'); return; }
-    const reader = new FileReader();
-    reader.onload = e => {
-      if (!state.ficheiros) state.ficheiros = [];
-      state.ficheiros.unshift({
-        id: Date.now() + Math.random(),
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        data: e.target.result,
-        uploadedAt: new Date().toISOString(),
-      });
-      saveState();
-      renderFicheiros();
-    };
-    reader.readAsDataURL(file);
-  });
-}
-function fichDownload(id) {
-  const f = (state.ficheiros||[]).find(x=>x.id===id);
-  if (!f) return;
-  const a = document.createElement('a');
-  a.href = f.data;
-  a.download = f.name;
-  a.click();
-}
-function fichDelete(id) {
-  showModal('Eliminar ficheiro', 'Tens a certeza que queres eliminar este ficheiro? Esta acção não pode ser desfeita.', [
-    {label:'Cancelar', cls:'', onClick:() => closeModal()},
-    {label:'Eliminar', cls:'danger', onClick:() => {
-      state.ficheiros = (state.ficheiros||[]).filter(x=>x.id!==id);
-      saveState();
-      renderFicheiros();
-      closeModal();
-    }}
-  ]);
-}
-function fichRename(id) {
-  const f = (state.ficheiros||[]).find(x=>x.id===id);
-  if (!f) return;
-  const dotIdx = f.name.lastIndexOf('.');
-  const ext  = dotIdx > 0 ? f.name.slice(dotIdx) : '';
-  const base = dotIdx > 0 ? f.name.slice(0, dotIdx) : f.name;
-  function doRename() {
-    const novo = (document.getElementById('fich-rename-input')?.value||'').trim();
-    if (!novo) return;
-    f.name = novo + ext;
-    saveState();
-    renderFicheiros();
-    closeModal();
-  }
-  showModal('Mudar o nome', `
-    <div style="margin-bottom:8px;font-size:13px;color:var(--grey)">Nome actual: <strong style="color:var(--dark)">${escapeHtml(f.name)}</strong></div>
-    <input id="fich-rename-input" type="text" value="${escapeHtml(base)}"
-      style="width:100%;padding:8px 12px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-size:13px;background:var(--card-bg);color:var(--dark);font-family:inherit;box-sizing:border-box"
-      onkeydown="if(event.key==='Enter') _fichRenameConfirm()">
-    <div style="margin-top:6px;font-size:11px;color:var(--grey)">Extensão mantida: <strong>${escapeHtml(ext)||'(sem extensão)'}</strong></div>
-  `, [
-    {label:'Cancelar', cls:'', onClick:() => closeModal()},
-    {label:'Guardar', cls:'primary', onClick: doRename}
-  ]);
-  window._fichRenameConfirm = doRename;
-  setTimeout(()=>{ const i=document.getElementById('fich-rename-input'); if(i){i.focus();i.select();} }, 80);
-}
-function renderFicheiros() {
-  const grid = document.getElementById('fich-grid');
-  if (!grid) return;
-  const query = (document.getElementById('fich-search')?.value||'').toLowerCase();
-  const list = (state.ficheiros||[]).filter(f => !query || f.name.toLowerCase().includes(query));
-  if (!list.length) {
-    grid.innerHTML = '<div class="fich-empty"><div class="fich-empty-icon">🗂</div><p>' +
-      (query ? 'Nenhum ficheiro encontrado.' : 'Ainda não há ficheiros.<br>Faz upload acima para começar.') + '</p></div>';
-    return;
-  }
-  grid.innerHTML = '<div class="fich-grid">' + list.map(f => `
-    <div class="fich-card">
-      <div class="fich-card-icon">${fichIcon(f.type)}</div>
-      <div class="fich-card-name">${escapeHtml(f.name)}</div>
-      <div class="fich-card-meta">${fichFmtSize(f.size)} · ${fichFmtDate(f.uploadedAt)}</div>
-      <div class="fich-card-actions">
-        <button onclick="fichDownload(${f.id})">⬇ Descarregar</button>
-        <button onclick="fichRename(${f.id})">✏️</button>
-        <button class="del" onclick="fichDelete(${f.id})">🗑</button>
-      </div>
-    </div>
-  `).join('') + '</div>';
-}
-
 // ── Display helper: 0→"0", null/undefined/""→"" ────────────────────────────
 function fmtVal(v, suffix) {
   if (v === null || v === undefined || v === '') return '';
@@ -5753,7 +5603,6 @@ function renderActivePanel() {
   if (tab==="closum")     renderLeadsPanel();
   if (tab==="tarefas")    renderTarefasPanel();
   if (tab==="reunioes")   renderReunioesPanel();
-  if (tab==="ficheiros")  renderFicheiros();
   if (tab==="socios")     renderSociosPanel();
   if (tab==="objetivos")  renderObjetivos();
   if (tab==="config")     { renderTable("t-equipa","equipa"); renderTable("t-metas","metas"); const gt=document.getElementById("gcal-toggle"); if(gt) gt.checked=!!state.gcalEnabled; _applyThemeBtns(localStorage.getItem(THEME_KEY)||'dark'); updateExcelSyncStatus(); }
@@ -5769,7 +5618,6 @@ function updateTabCounts() {
     tarefas: state.tarefas.filter(t=>t.estado==="Em curso").length,
     socios: state.socios.length,
     objetivos: objCount,
-    ficheiros: (state.ficheiros||[]).length,
   };
   document.querySelectorAll("#tabs button").forEach(btn=>{
     const n=counts[btn.dataset.tab];
