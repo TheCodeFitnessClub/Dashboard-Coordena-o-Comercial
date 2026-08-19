@@ -2073,7 +2073,13 @@ function formatForInput(v, type) {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(v))) return String(v).slice(0,16);
     const d=new Date(v); return isNaN(d)?v:d.toISOString().slice(0,16);
   }
-  if (type==="date") { const d=new Date(v); return isNaN(d)?v:d.toISOString().slice(0,10); }
+  if (type==="date") {
+    // Se ja esta em YYYY-MM-DD, devolver tal e qual — mesma proteccao que o
+    // datetime acima. new Date()+toISOString() converteria para UTC e no verao
+    // (UTC+1) podia recuar um dia.
+    if (/^\d{4}-\d{2}-\d{2}/.test(String(v))) return String(v).slice(0,10);
+    const d=new Date(v); return isNaN(d)?v:_isoLocal(d);
+  }
   return v;
 }
 function pct(v)      { return ((v||0)*100).toFixed(1)+"%"; }
@@ -3174,8 +3180,8 @@ function addRow(schemaKey) {
   // Inputs Diários é sincronizado do OneDrive — bloquear criação manual.
   if (schemaKey === "inputs") { showBanner('Inputs Diários é sincronizado do OneDrive — edição manual desactivada.', 'warning'); return; }
   const r = {};
-  if (schemaKey==="tarefas")                                                        { r.estado="A fazer"; r.prioridade="Média"; r.criadoEm=new Date().toISOString().slice(0,10); }
-  if (["inputs","reunioesD","reunioesC","reunioesDir"].includes(schemaKey))         r.data=new Date().toISOString().slice(0,10);
+  if (schemaKey==="tarefas")                                                        { r.estado="A fazer"; r.prioridade="Média"; r.criadoEm=_isoLocal(); }
+  if (["inputs","reunioesD","reunioesC","reunioesDir"].includes(schemaKey))         r.data=_isoLocal();
   state[schemaKey].push(r);
   saveState();
   renderAllForKey(schemaKey);
@@ -3342,7 +3348,7 @@ function uploadFile(input, sk, idx, key) {
   }
   const reader=new FileReader();
   reader.onload=(e)=>{
-    state[sk][idx][key]={name:f.name,size:f.size,type:f.type,dataUrl:e.target.result,uploadedAt:new Date().toISOString().slice(0,10)};
+    state[sk][idx][key]={name:f.name,size:f.size,type:f.type,dataUrl:e.target.result,uploadedAt:_isoLocal()};
     saveState(); renderAllForKey(sk);
   };
   reader.readAsDataURL(f);
@@ -3655,7 +3661,10 @@ function renderTempoRespChart() {
     if (gran==='dia') {
       const cur=new Date(start); cur.setHours(0,0,0,0);
       const fin=new Date(end);   fin.setHours(23,59,59,999);
-      while (cur<=fin) { keys.push(cur.toISOString().slice(0,10)); cur.setDate(cur.getDate()+1); }
+      // _isoLocal e nao toISOString: cur e meia-noite LOCAL, e toISOString
+      // converte para UTC — no verao (UTC+1) cada chave saia com o dia anterior,
+      // desalinhada dos dados, que sao agrupados pelo texto da data.
+      while (cur<=fin) { keys.push(_isoLocal(cur)); cur.setDate(cur.getDate()+1); }
     } else if (gran==='semana') {
       const cur=new Date(start);
       const dow=cur.getDay(); cur.setDate(cur.getDate()-(dow===0?6:dow-1)); // align to Monday
@@ -3685,7 +3694,8 @@ function renderTempoRespChart() {
     const filtered=applyPeriodFilter(state.leads.filter(l=>membros.includes(l.comercial)));
     const bmap={};
     filtered.forEach(l=>{
-      const t=computeTempoResp(l); if (!t||t<=0) return;
+      // inclui 0 (contactada no mesmo minuto); '' e leads sem contacto ficam de fora
+      const t=computeTempoResp(l); if (t==='' || t<0) return;
       const bk=getTimeBucket(l.dataEntrada,gran); if (!bk) return;
       allKeysSet.add(bk);
       if (!bmap[bk]) bmap[bk]={sum:0,n:0};
@@ -4346,7 +4356,7 @@ function showTodoPopup() {
   if (!body || !title) return;
 
   // Tarefas por concluir (estado != Feita), ordenadas por prazo (atrasadas primeiro)
-  const hoje = new Date().toISOString().slice(0,10);
+  const hoje = _isoLocal();
   const tarefas = (state.tarefas || [])
     .filter(t => (t.estado || 'A fazer') !== 'Feita')
     .filter(t => (t.titulo||'').trim() || (t.descricao||'').trim())
@@ -5224,7 +5234,7 @@ function openTarefaModal(idx) {
   _tarefaForm.estado     = TASK_STATUS.includes(t.estado)     ? t.estado     : 'A fazer';
   _tarefaForm.prioridade = TASK_PRIO.includes(t.prioridade)   ? t.prioridade : 'Média';
   _renderTarefaPills();
-  document.getElementById('tarefa-f-criadoem').value = t.criadoEm || new Date().toISOString().slice(0,10);
+  document.getElementById('tarefa-f-criadoem').value = t.criadoEm || _isoLocal();
   document.getElementById('tarefa-f-prazo').value    = t.prazo || '';
   document.getElementById('tarefa-modal-status').textContent = '';
   // "Apagar" só faz sentido numa tarefa que já existe
@@ -5911,7 +5921,14 @@ function importWorkbook(wb, filename) {
         const fk=HEADER_TO_FIELD[h]||h;
         if (fk.startsWith("_")) return;
         let val=r[i];
-        if (val instanceof Date) val=h.includes("data/hora")?val.toISOString().slice(0,16):val.toISOString().slice(0,10);
+        // O XLSX devolve datas como objectos Date em hora LOCAL; toISOString
+        // converteria para UTC e recuaria um dia no verao. Formatar em local.
+        if (val instanceof Date) {
+          const p2=n=>String(n).padStart(2,"0");
+          val = h.includes("data/hora")
+            ? _isoLocal(val)+"T"+p2(val.getHours())+":"+p2(val.getMinutes())
+            : _isoLocal(val);
+        }
         o[fk]=val;
       });
       return o;
@@ -5944,7 +5961,7 @@ document.getElementById("btn-export-xlsx").addEventListener("click",()=>{
     const ws=XLSX.utils.aoa_to_sheet([[sch.label.toUpperCase()],header,...dataRows]);
     XLSX.utils.book_append_sheet(wb,ws,sn);
   });
-  const fname="TheCode_"+new Date().toISOString().slice(0,10)+".xlsx";
+  const fname="TheCode_"+_isoLocal()+".xlsx";
   XLSX.writeFile(wb,fname);
   showBanner("✓ "+fname+" exportado","success");
 });
@@ -6013,7 +6030,7 @@ function addVendaRapida(unidadePreset) {
     ? (state.equipa||[]).find(e => e.unidade===unidadePreset && (!e.estado||e.estado==="Ativo"))
     : null;
   const r = {
-    data:      new Date().toISOString().slice(0,10),
+    data:      _isoLocal(),
     unidade:   unidadePreset || "",
     comercial: membro ? (membro.comercial||"") : "",
     qtd:       1,
@@ -6749,7 +6766,7 @@ function openPeriodSyncModal() {
     const s = getAPISettings();
     from.value = s.closumStartDate || '2026-05-03';
   }
-  if (to && !to.value) to.value = new Date().toISOString().slice(0,10);
+  if (to && !to.value) to.value = _isoLocal();
   const st = document.getElementById('period-sync-status');
   if (st) st.textContent = '';
   document.getElementById('period-sync-modal-bg').classList.add('show');
@@ -7836,7 +7853,7 @@ function _maybeRunDailyFullSync() {
     const now = new Date();
     const h = now.getHours();
     if (h < 3 || h >= 6) return;                 // fora da janela da madrugada
-    const hoje = now.toISOString().slice(0,10);  // AAAA-MM-DD (local-ish)
+    const hoje = _isoLocal(now);  // data LOCAL
     if (localStorage.getItem('closum_full_sync_day') === hoje) return; // já correu hoje
     localStorage.setItem('closum_full_sync_day', hoje);
     console.log('[Closum] Sincronização completa automática (madrugada)…');
@@ -8054,7 +8071,7 @@ function openReuniaoModal(sk, idx) {
 
   document.getElementById('reuniao-modal-title').textContent = nova ? 'Nova reunião' : 'Editar reunião';
   document.getElementById('reuniao-f-titulo').value     = row.titulo || '';
-  document.getElementById('reuniao-f-data').value       = row.data || (nova ? new Date().toISOString().slice(0,10) : '');
+  document.getElementById('reuniao-f-data').value       = row.data || (nova ? _isoLocal() : '');
   document.getElementById('reuniao-f-hora').value       = row.hora || '';
   document.getElementById('reuniao-f-convidados').value = row.convidados || '';
   document.getElementById('reuniao-f-topicos').value    = log.topicos || '';
