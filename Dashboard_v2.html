@@ -6946,34 +6946,10 @@ function dismissClosumDiscrepancyBanner() {
   if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 function renderClosumDiscrepancyBanner() {
+  // Aviso removido a pedido — a verificação de discrepância continua a correr
+  // em segundo plano (fica em _lastClosumCheck), só deixou de aparecer no ecrã.
   const el = document.getElementById('closum-discrepancy-banner');
-  if (!el) return;
-  const c = _lastClosumCheck;
-  if (!c || (_closumBannerDismissedTs && _closumBannerDismissedTs === c.ts)) {
-    el.style.display = 'none'; el.innerHTML = '';
-    return;
-  }
-  const msgs = [];
-  if (c.estadoDiff && c.estadoDiff !== 0) {
-    const n = Math.abs(c.estadoDiff);
-    msgs.push(`⚠ ${n} lead${n!==1?'s':''} de diferença face ao Closum (estado "Negócio Perdido"${c.janelaLabel ? ' · '+c.janelaLabel : ''}).`);
-  }
-  if (c.motivoFetchFailures > 0) {
-    msgs.push(`⚠ ${c.motivoFetchFailures} lead${c.motivoFetchFailures!==1?'s':''} não pôde${c.motivoFetchFailures!==1?'ram':''} ser verificada${c.motivoFetchFailures!==1?'s':''} quanto ao motivo (erro de rede).`);
-  }
-  if (c.pendingMotivo > 0) {
-    msgs.push(`ℹ ${c.pendingMotivo} lead${c.pendingMotivo!==1?'s':''} perdida${c.pendingMotivo!==1?'s':''} ainda por verificar quanto ao motivo — serão verificadas nos próximos syncs.`);
-  }
-  if (!msgs.length) {
-    el.style.display = 'none'; el.innerHTML = '';
-    return;
-  }
-  el.style.display = 'flex';
-  el.innerHTML = `<span>${msgs.join(' ')}</span>
-    <span style="display:flex;gap:6px;flex-shrink:0">
-      <button onclick="manualFullSyncClosum()" style="padding:4px 12px;border:1.5px solid #F97316;border-radius:6px;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;font-weight:700;color:#F97316">🔁 Reconciliar (sync completa)</button>
-      <button onclick="dismissClosumDiscrepancyBanner()" style="padding:4px 10px;border:none;border-radius:6px;font-size:11px;background:transparent;cursor:pointer;font-family:inherit;font-weight:600;color:var(--grey)">Dispensar</button>
-    </span>`;
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
 }
 
 // Sincronização COMPLETA on-demand: re-verifica a source de TODAS as leads
