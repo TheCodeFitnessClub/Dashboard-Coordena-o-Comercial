@@ -1386,6 +1386,28 @@ const KPI_LIST    = ["Tempo médio resp. (min)","% Chamadas atendidas","% Walk-i
 const TASK_STATUS = ["A fazer","Em curso","Feita"];
 const TASK_PRIO   = ["Alta","Média","Baixa"];
 
+// Leads com estas tags no Closum sao de recrutamento, nao de venda: ficam
+// completamente fora da dashboard (contagens, graficos, KPIs, tudo).
+// A comparacao ignora acentos, maiusculas e espacos a mais.
+// NAO entram na tombstone de propósito — tirar a tag no Closum, ou uma entrada
+// desta lista, e a lead volta a aparecer no sync seguinte. Nada se perde.
+const TAGS_EXCLUIDAS = ["Recrutamento Gym Support", "Recrutamento Comercial"];
+const _normTag = s => String(s == null ? '' : s)
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/\s+/g, ' ').trim();
+const _TAGS_EXCLUIDAS_SET = new Set(TAGS_EXCLUIDAS.map(_normTag));
+// O Closum devolve contact_tag como [{tag:{tag:"..."}}]; tolerar outros formatos.
+function _labelTag(t) {
+  if (!t) return '';
+  if (typeof t === 'string') return t;
+  if (t.tag && typeof t.tag === 'object') return t.tag.tag || t.tag.name || '';
+  return t.tag || t.name || '';
+}
+function temTagExcluida(apiLead) {
+  const tags = Array.isArray(apiLead && apiLead.contact_tag) ? apiLead.contact_tag : [];
+  return tags.some(t => _TAGS_EXCLUIDAS_SET.has(_normTag(_labelTag(t))));
+}
+
 // ── Schema ─────────────────────────────────────────────────
 const SCHEMA = {
   equipa: { label:"Equipa", fields:[
@@ -6997,6 +7019,21 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       if (skipped > 0) console.log('[Closum sync] Ignoradas', skipped, 'leads apagadas pelo utilizador');
     }
 
+    // Leads de recrutamento nao sao leads comerciais. Filtradas aqui para nao
+    // serem criadas nem actualizadas, e para que a verificacao de discrepancia
+    // mais abaixo compare os dois lados ja sem elas.
+    const _excluidasTagIds = new Set();
+    {
+      const before = allApiLeads.length;
+      allApiLeads = allApiLeads.filter(l => {
+        if (!temTagExcluida(l)) return true;
+        _excluidasTagIds.add('CLO-' + l.id);
+        return false;
+      });
+      const ignoradas = before - allApiLeads.length;
+      if (ignoradas > 0) console.log('[Closum sync] Ignoradas', ignoradas, 'leads com tag de recrutamento');
+    }
+
     // Deduplicar state.leads por leadId — mantém apenas a MAIS RECENTE.
     // As duplicadas antigas são apagadas automaticamente.
     {
@@ -7406,6 +7443,21 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       }
     }
 
+    // Limpar do estado as leads de recrutamento que la tenham ficado de syncs
+    // anteriores (a tag pode ter sido posta depois de a lead ja existir aqui).
+    // Corre ANTES da eliminacao por ausencia: se corresse depois, estas leads
+    // ainda contariam em "candidatas" e baixariam o racio da guarda de
+    // sanidade, podendo bloquear eliminacoes legitimas.
+    let removidasPorTag = 0;
+    if (_excluidasTagIds.size) {
+      const antesTag = state.leads.length;
+      state.leads = state.leads.filter(l => !l.leadId || !_excluidasTagIds.has(l.leadId));
+      removidasPorTag = antesTag - state.leads.length;
+      if (removidasPorTag > 0) {
+        console.log('[Closum sync] Removidas', removidasPorTag, 'leads com tag de recrutamento');
+      }
+    }
+
     // Remover leads apagadas no Closum: a dashboard passa a espelhar o Closum.
     // Só valida leads DENTRO da janela de sync (criadas >= startDate) — leads
     // mais antigas não são descarregadas, por isso são sempre preservadas.
@@ -7456,7 +7508,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Reset dismiss so warnings re-evaluate after every sync
     _leadWarningDismissed = false;
     _leadWarningNovoDismissed = false;
-    if (novos > 0 || atualizadas > 0 || removedApagadas > 0) {
+    if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0) {
       saveState();
       renderAllForKey('leads');
     } else {
