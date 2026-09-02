@@ -5049,18 +5049,34 @@ function drawSociosCharts(allRows, selRows) {
   charts.sociosEvol=new Chart(ctx1,{type:"line",
     data:{labels:periods,datasets:units.map((u,i)=>({label:u,data:periods.map(p=>{const r=allRows.find(x=>x.periodo===p&&x.unidade===u);return r?computeSociosFim(r):null;}),borderColor:colors[i%colors.length],backgroundColor:colors[i%colors.length]+"18",tension:.35,pointRadius:4,pointHoverRadius:6,pointBackgroundColor:colors[i%colors.length],borderWidth:2}))},
     options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:"Sócios ativos por unidade"}},scales:{x:{grid:{display:false}},y:{beginAtZero:false}}}});
-  // Churn chart — média das taxas mensais no período (vazio se período < mês)
-  const churnSubMes = _periodoAbaixoDeMes();
+  // Churn chart — media das taxas mensais de cada clube, no periodo da aba
+  // horizontal. Nao ha caso "periodo < mes": getPeriodMonths resolve sempre
+  // para meses inteiros, por isso o minimo e um mes; em "total" a media e
+  // desde o inicio.
   const churnRows = (selRows && selRows.length) ? selRows : allRows;
-  const churnUnits = [...new Set(churnRows.map(r=>r.unidade).filter(Boolean))];
+  // Ordem de `units` (a mesma do grafico de evolucao) para cada clube manter
+  // sempre a mesma posicao E a mesma cor nos dois graficos.
+  const churnUnits = units.filter(u => churnRows.some(r => r.unidade === u));
   const churnData = churnUnits.map(u => {
-    if (churnSubMes) return null;
     const c = _churnMensalMedio(churnRows.filter(r=>r.unidade===u));
     return c===null ? null : parseFloat(c.toFixed(2));
   });
+  const churnCores = churnUnits.map(u => colors[units.indexOf(u) % colors.length]);
+  const churnPer = [...new Set(churnRows.map(r=>r.periodo).filter(Boolean))].sort();
+  const churnSub = !churnPer.length ? ''
+    : churnPer.length===1 ? 'média mensal · '+churnPer[0]
+    : 'média mensal · '+churnPer[0]+' → '+churnPer[churnPer.length-1];
+  const churnSubCor = getComputedStyle(document.body).getPropertyValue('--grey').trim() || '#6B7B8D';
   charts.sociosChurn=new Chart(ctx2,{type:"bar",
-    data:{labels:churnUnits,datasets:[{label:"Churn %",data:churnData,backgroundColor:"#F87171",borderRadius:6,borderSkipped:false}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:"Churn % por unidade"},legend:{display:false}},scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}});
+    data:{labels:churnUnits,datasets:[{label:"Churn %",data:churnData,backgroundColor:churnCores,borderRadius:6,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{
+        title:{display:true,text:"Churn % por unidade"},
+        subtitle:{display:!!churnSub,text:churnSub,color:churnSubCor,padding:{bottom:10}},
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>' '+(c.parsed.y!==null?c.parsed.y.toFixed(2)+'%':'—')}}
+      },
+      scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>v+'%'}}}}});
 }
 
 // ── Tarefas — alertas de expiração ────────────────────────
