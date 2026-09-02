@@ -547,6 +547,7 @@ table.tbl th.th-custom{position:relative;padding-right:26px!important}
 /* ── Sócios: cards grandes ── */
 .socios-section-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--grey);margin:28px 0 12px;display:flex;align-items:center;gap:10px}
 .socios-section-lbl::after{content:"";flex:1;height:1px;background:var(--line)}
+.socios-nota{font-size:11px;color:var(--grey);margin:-6px 0 14px;line-height:1.5}
 .socios-duo-card{background:var(--card-bg);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--card-shadow);transition:box-shadow .2s}
 .socios-duo-card:hover{box-shadow:var(--card-shadow-hover)}
 .socios-duo-card .club{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--grey);margin-bottom:14px}
@@ -4942,6 +4943,7 @@ function renderSociosStats() {
 
   // Section 1: Sócios início + fim
   h+='<div class="socios-section-lbl">Sócios — início e fim do período'+(rangeLabel?' ('+rangeLabel+')':'')+'</div>';
+  h+='<div class="socios-nota">Nota: o staff não é contabilizado nos sócios.</div>';
   h+='<div class="socios-grid">';
   units.forEach(u=>{
     const a=aggUnit(u), aP=aggUnitPrev(u);
