@@ -6941,12 +6941,67 @@ function normalizeSource(s) {
 }
 // Possíveis "var" do campo source nos custom_fields do Closum
 const SOURCE_VARS = ['source','lead-source','leadsource','origem','origin','canal','channel'];
+// A 15/09/2026 alteraram o campo da source no Closum e a dashboard deixou de a
+// encontrar nas leads novas. Para nao depender do nome interno do campo, cada
+// sync descobre-o sozinho (_descobrirCampoSource): e o campo personalizado que
+// mais vezes tem um valor de source conhecido (REFS, Website, POS, WI, LEADS...).
+let _sourceVarDescoberta = '';
+let _sourceValoresConhecidos = null;
+// Texto de um valor de campo — o Closum pode devolver string, lista ou objecto.
+function _valorCampo(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(_valorCampo).filter(Boolean).join(', ');
+  if (typeof v === 'object') return String(v.label || v.name || v.value || v.title || '');
+  return String(v);
+}
+function _valoresSource() {
+  if (_sourceValoresConhecidos) return _sourceValoresConhecidos;
+  const s = new Set(['LEADS', 'WI', 'REFS', 'OUT', 'POS', 'WEBSITE']);
+  if (typeof SOURCE_BASELINE !== 'undefined') SOURCE_BASELINE.forEach(x => s.add(String(x).toUpperCase()));
+  (state.leads || []).forEach(l => { const t = String(l.source || '').trim(); if (t) s.add(t.toUpperCase()); });
+  s.delete('TOMBSTONE'); s.delete('LEAD DIGITAL');   // nao sao valores do Closum
+  return (_sourceValoresConhecidos = s);
+}
+function _campoNaoSource(f) { return !f || String(f.var || '') === 'motivo-de-negocio-perdido'; }
+function _descobrirCampoSource(leads) {
+  _sourceValoresConhecidos = null;
+  const valores = _valoresSource();
+  const conta = {};
+  (leads || []).forEach(al => {
+    const cf = Array.isArray(al.custom_fields) ? al.custom_fields : Array.isArray(al.custom_data) ? al.custom_data : [];
+    cf.forEach(f => {
+      if (_campoNaoSource(f)) return;
+      const v = String(f.var || '');
+      if (!v || SOURCE_VARS.includes(v.toLowerCase())) return;
+      if (valores.has(_valorCampo(f.value).trim().toUpperCase())) conta[v] = (conta[v] || 0) + 1;
+    });
+  });
+  const melhor = Object.entries(conta).sort((a, b) => b[1] - a[1])[0];
+  _sourceVarDescoberta = (melhor && melhor[1] >= 3) ? melhor[0] : '';
+  if (_sourceVarDescoberta) console.log('[Closum sync] Source lida do campo "' + _sourceVarDescoberta + '" (' + melhor[1] + ' leads com source conhecida)');
+  return _sourceVarDescoberta;
+}
 // Extrai a source de um array de custom_fields/custom_data do Closum
 function extractSourceFromCustom(cfList) {
   if (!Array.isArray(cfList)) return '';
+  // 1) Nomes de campo conhecidos
   for (const f of cfList) {
     const v = String(f.var || '').toLowerCase();
-    if (SOURCE_VARS.includes(v) && f.value) return String(f.value);
+    const val = typeof f.value === 'string' ? f.value : _valorCampo(f.value);
+    if (SOURCE_VARS.includes(v) && val && val.trim()) return val;
+  }
+  // 2) Campo descoberto neste sync (leva tambem valores novos, como uma source que se crie)
+  if (_sourceVarDescoberta) {
+    const f = cfList.find(x => x && String(x.var || '') === _sourceVarDescoberta);
+    const val = f ? _valorCampo(f.value).trim() : '';
+    if (val) return val;
+  }
+  // 3) Ultimo recurso: um campo cujo valor seja uma source conhecida
+  const valores = _valoresSource();
+  for (const f of cfList) {
+    if (_campoNaoSource(f)) continue;
+    const val = _valorCampo(f.value).trim();
+    if (val && valores.has(val.toUpperCase())) return val;
   }
   return '';
 }
@@ -7050,6 +7105,9 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       page++;
       if (page > 200) break; // safety cap
     }
+
+    // Descobrir em que campo o Closum guarda a source (ver extractSourceFromCustom).
+    _descobrirCampoSource(allApiLeads);
 
     // Ignorar leads que o utilizador apagou manualmente (tombstones).
     // Sem isto, o sync voltaria a recriar a lead a partir do Closum.
