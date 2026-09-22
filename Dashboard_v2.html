@@ -1635,6 +1635,7 @@ let state = {
   kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   deletedLeadIds:[], deletedLeads:[],
+  sourceDivergente:{},   // leadId -> source que o Closum tem, quando difere da source bloqueada
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
 let _filtersBackup = null; // saved {unit, com} before entering compare mode, restored on exit
@@ -7492,6 +7493,16 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
         // Se source é '' (não veio nada nesta iteração), preservamos o valor já guardado.
         // BLOQUEIO 15/09/2026: a source destas leads nunca e reescrita pelo sync.
         if (!manual('source') && !sourceBloqueada(ex) && source && ex.source !== source) { ex.source = source; changed = true; }
+        // Nas bloqueadas, regista a parte a source que o Closum tem quando difere da
+        // guardada — sem a alterar. Serve para saber que leads divergem sem desbloquear.
+        // Usa sourceFound (o campo), nao a regra da tag Website.
+        if (sourceBloqueada(ex)) {
+          if (!state.sourceDivergente) state.sourceDivergente = {};
+          const noClosum = sourceFound ? normalizeSource(sourceFound) : '';
+          const div = noClosum && noClosum !== normalizeSource(ex.source) ? noClosum : '';
+          if (div && state.sourceDivergente[lid] !== div) { state.sourceDivergente[lid] = div; changed = true; }
+          else if (noClosum && !div && state.sourceDivergente[lid]) { delete state.sourceDivergente[lid]; changed = true; }
+        }
         if (changed) atualizadas++;
       } else {
         // Lead NOVA → tempos precisos a partir do Histórico da Lead (notas):
