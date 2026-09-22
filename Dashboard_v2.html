@@ -1727,6 +1727,28 @@ const CLOSUM_PROXY = window.location.origin + '/proxy';
 const SERVER_SYNC = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 let _syncPushTimer = null;
 let _isDirty = false; // true enquanto houver alterações locais ainda não guardadas no servidor
+
+// ── Versao nova publicada ──────────────────────────────────────────────────
+// Uma aba aberta continuava a correr a versao com que abriu — as vezes horas —
+// e a sincronizar com regras antigas. Passa a verificar de 5 em 5 minutos se
+// houve deploy e recarrega-se quando for seguro (nada por gravar, nenhuma
+// janela aberta). Se nao for seguro, avisa e tenta outra vez mais tarde.
+let _versaoCarregada = null;
+let _versaoAvisada = false;
+async function _vigiarVersao() {
+  try {
+    const r = await fetch('/api/versao', { cache: 'no-store' });
+    if (!r.ok) return;
+    const { versao } = await r.json();
+    if (!versao) return;
+    if (_versaoCarregada === null) { _versaoCarregada = versao; return; }
+    if (versao === _versaoCarregada) return;
+    if (!_isDirty && !_userIsInteracting()) { console.log('[versao] nova versao publicada — a recarregar'); location.reload(); return; }
+    if (!_versaoAvisada) { _versaoAvisada = true; showBanner('Ha uma versao nova da dashboard. Vai ser carregada assim que acabares o que estas a fazer.', 'success'); }
+  } catch (_) {}
+}
+setTimeout(_vigiarVersao, 3000);
+setInterval(_vigiarVersao, 5 * 60 * 1000);
 let _lastServerUpdatedAt = null; // timestamp do último estado conhecido do servidor
 
 // Detecta se o utilizador está activamente a interagir com a UI (a digitar num campo,

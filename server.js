@@ -190,8 +190,19 @@ app.use((req, res, next) => {
 });
 
 // ── Serve o dashboard ─────────────────────────────────────────────────────────
+const APP_HTML = path.join(__dirname, 'Dashboard_v2.html');
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'Dashboard_v2.html'));
+  res.sendFile(APP_HTML);
+});
+
+// Versao do ficheiro servido. O cliente compara com a que carregou; se mudou,
+// houve deploy e a pagina aberta esta desactualizada (ver _vigiarVersao).
+app.get('/api/versao', (req, res) => {
+  require('fs').stat(APP_HTML, (err, st) => {
+    if (err) return res.status(500).json({ erro: 'ficheiro nao encontrado' });
+    res.set('Cache-Control', 'no-store');
+    res.json({ versao: String(st.mtimeMs) + '-' + st.size });
+  });
 });
 
 // ── API: ler estado ───────────────────────────────────────────────────────────
