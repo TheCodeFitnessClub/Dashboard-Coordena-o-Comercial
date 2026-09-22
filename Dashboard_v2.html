@@ -1451,6 +1451,10 @@ const SCHEMA = {
     { key:"comercial",            label:"Comercial",            type:"select", source:"comerciais", w:170 },
     { key:"dataPrimeiroContacto", label:"1º contacto",          type:"datetime",      w:170 },
     { key:"canal",                label:"Canal",                type:"text",          w:100 },
+    // Source editavel: corrigir a mao uma lead mal classificada. A edicao marca
+    // _manual e passa a ser permanente — nenhum sync a reescreve.
+    { key:"source",               label:"Source",               type:"select", w:180,
+      options:["Lead Digital","Website","Contacto Direto Clube","Walk-in não convertido","REFS","OUT","POS"] },
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
@@ -8017,6 +8021,26 @@ function _runOneShotMigrateNova() {
   }
 }
 
+// One-shot: sources corrigidas a mao quando nao havia forma de o fazer na interface.
+// Ficam marcadas como manuais, por isso nenhum sync as reescreve.
+const _FIX_SOURCE = { 'CLO-60666951': 'REFS' };   // Matteo de Campos: tag de website punha-o em Website
+function _runOneShotFixSource() {
+  const FLAG = 'fixSource_v1';
+  if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
+  let mudou = 0;
+  (state.leads || []).forEach(l => {
+    const nova = l && l.leadId ? _FIX_SOURCE[l.leadId] : null;
+    if (!nova) return;
+    if (l.source !== nova) { l.source = nova; mudou++; }
+    l._manual = l._manual || {};
+    l._manual.source = true;                       // permanente
+    if (state.sourceDivergente) delete state.sourceDivergente[l.leadId];
+  });
+  if (!state.__cleanupDone) state.__cleanupDone = {};
+  state.__cleanupDone[FLAG] = true;
+  if (mudou > 0) { console.log('[migrate] Source corrigida em', mudou, 'lead(s)'); saveState(); }
+}
+
 // Migracao one-shot: "Ativos fim" deixou de ser calculado (inicio + novas -
 // cancelamentos) e passou a ser introduzido a mao. Grava nas linhas existentes o
 // valor que ja mostravam, para nenhum historico mudar. As novas inscricoes NAO sao
@@ -8071,6 +8095,7 @@ if (SERVER_SYNC) {
     _runOneShotCleanupInputs();
     _runOneShotMigrateNova();
     _runOneShotSociosFimManual();
+    _runOneShotFixSource();
     _runOneShotRestoreDataEntrada();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   });
