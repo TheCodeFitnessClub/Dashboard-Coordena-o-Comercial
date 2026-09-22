@@ -1635,7 +1635,8 @@ let state = {
   kpisM:[], tarefas:[], rotina:[], objetivos:[], objetivosCoord:[], vendasExtras:[],
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   deletedLeadIds:[], deletedLeads:[],
-  sourceDivergente:{},   // leadId -> source que o Closum tem, quando difere da source bloqueada
+  sourceDivergente:{},
+  closumEspelho:null,    // leads do Closum do mes corrente tal como o Closum as tem (reconciliacao)   // leadId -> source que o Closum tem, quando difere da source bloqueada
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
 let _filtersBackup = null; // saved {unit, com} before entering compare mode, restored on exit
@@ -7110,6 +7111,19 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Descobrir em que campo o Closum guarda a source (ver extractSourceFromCustom).
     _descobrirCampoSource(allApiLeads);
 
+    // Espelho do Closum do mes corrente: nome, criacao, source e tags de cada lead
+    // TAL COMO o Closum as tem, antes de qualquer filtro (tombstone, recrutamento).
+    // Permite reconciliar os cards com o Closum sem ir la. So em sync completo da
+    // janela — num sync de periodo a lista estaria incompleta.
+    const _mesEspelho = _isoLocal(new Date()).slice(0, 7);
+    const _espelho = {};
+    if (!isPeriodSync) allApiLeads.forEach(l => {
+      if (String(l.creation_date).slice(0, 7) !== _mesEspelho) return;
+      const cf = Array.isArray(l.custom_fields) ? l.custom_fields : Array.isArray(l.custom_data) ? l.custom_data : null;
+      const tags = (Array.isArray(l.contact_tag) ? l.contact_tag : []).map(_labelTag).filter(Boolean);
+      _espelho['CLO-' + l.id] = { n: l.name || '', c: String(l.creation_date).slice(0, 16), s: extractSourceFromCustom(cf), t: tags.join(' | ') };
+    });
+
     // Ignorar leads que o utilizador apagou manualmente (tombstones).
     // Sem isto, o sync voltaria a recriar a lead a partir do Closum.
     const _deletedSet = new Set(state.deletedLeadIds || []);
@@ -7420,6 +7434,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       const sourceFromListing = extractSourceFromCustom(cfListMain);
       const sourceFromDetail  = sourceMap[al.id] || '';
       const sourceFound = sourceFromListing || sourceFromDetail; // pode ser ''
+      if (_espelho[lid] && sourceFound) _espelho[lid].s = sourceFound;   // completa com o detalhe
       // Tag "Website ..." (vem na listagem) → sub-tipo de Lead Digital.
       // Só se aplica quando NÃO há source explícita.
       const _tags = Array.isArray(al.contact_tag) ? al.contact_tag : [];
@@ -7620,7 +7635,12 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Reset dismiss so warnings re-evaluate after every sync
     _leadWarningDismissed = false;
     _leadWarningNovoDismissed = false;
-    if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0) {
+    let espelhoMudou = false;
+    if (!isPeriodSync) {
+      const espelhoNovo = { mes: _mesEspelho, leads: _espelho };
+      if (JSON.stringify(state.closumEspelho || null) !== JSON.stringify(espelhoNovo)) { state.closumEspelho = espelhoNovo; espelhoMudou = true; }
+    }
+    if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0 || espelhoMudou) {
       saveState();
       renderAllForKey('leads');
     } else {
