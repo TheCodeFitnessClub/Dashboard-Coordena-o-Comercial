@@ -1451,10 +1451,9 @@ const SCHEMA = {
     { key:"comercial",            label:"Comercial",            type:"select", source:"comerciais", w:170 },
     { key:"dataPrimeiroContacto", label:"1º contacto",          type:"datetime",      w:170 },
     { key:"canal",                label:"Canal",                type:"text",          w:100 },
-    // Source editavel: corrigir a mao uma lead mal classificada. A edicao marca
-    // _manual e passa a ser permanente — nenhum sync a reescreve.
-    { key:"source",               label:"Source",               type:"select", w:180,
-      options:["Lead Digital","Website","Contacto Direto Clube","Walk-in não convertido","REFS","OUT","POS"] },
+    // Source: so de leitura. E o Closum que manda nela, e as excepcoes corrigem-se
+    // por codigo (ver _FIX_SOURCE), para ninguem lhe tocar sem querer.
+    { key:"source",               label:"Source",               type:"computed",      w:180, compute:r=>r.source||"" },
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
