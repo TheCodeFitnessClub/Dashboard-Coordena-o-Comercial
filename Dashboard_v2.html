@@ -690,6 +690,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <button class="period-pill" data-period="trimestre" onclick="setPeriod('trimestre')">Trimestre</button>
     <button class="period-pill" data-period="semestre"  onclick="setPeriod('semestre')">Semestre</button>
     <button class="period-pill" data-period="ano"   onclick="setPeriod('ano')">Ano</button>
+    <button class="period-pill" data-period="custom" onclick="setPeriod('custom')" title="Escolher as datas de início e fim">Personalizado</button>
     <button class="period-pill" data-period="total" onclick="setPeriod('total')">Total</button>
     <button class="period-pill compare-pill" data-period="comparar" onclick="setPeriod('comparar')" title="Ver período actual vs período anterior">⇄ Comparar</button>
   </div>
@@ -1641,7 +1642,7 @@ let state = {
   sourceDivergente:{},
   closumEspelho:null,    // leads do Closum do mes corrente tal como o Closum as tem (reconciliacao)   // leadId -> source que o Closum tem, quando difere da source bloqueada
 };
-let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
+let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, customStart:null, customEnd:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
 let _filtersBackup = null; // saved {unit, com} before entering compare mode, restored on exit
 // Legacy — retained for compatibility but no longer used for UI
 let sociosPeriodo = 'total';
@@ -2021,7 +2022,13 @@ function _churnMensalMedio(uRows) {
 }
 // Período da aba horizontal inferior a um mês (não faz sentido mostrar churn mensal)
 function _periodoAbaixoDeMes() {
-  return filters.period === 'dia' || filters.period === 'semana';
+  if (filters.period === 'dia' || filters.period === 'semana') return true;
+  // Personalizado: so faz sentido falar de churn mensal se a janela cobrir um mes.
+  if (filters.period === 'custom') {
+    const {start, end} = getPeriodRange('custom', false);
+    return Math.round((end.getTime() - start.getTime()) / 86400000) < 28;
+  }
+  return false;
 }
 function computeRetencao(r) {
   const i = Number(r.ativosInicio)||0; if (!i) return "";
@@ -2290,6 +2297,22 @@ function getISOWeekStr(date) {
 //   In compare mode (new design): both sides share the SAME period — no backward shift.
 //   Comparison side differs only by unit/comercial filters (see aggregateLeads).
 function getPeriodRange(period, previous, anchorDate) {
+  // Periodo personalizado: nao depende da ancora, sao duas datas escolhidas a mao.
+  // Tem de vir antes do ramo "previous", que desloca a ancora e nao se aplica aqui.
+  if (period === 'custom') {
+    const h = new Date();
+    const ini = filters.customStart
+      ? new Date(filters.customStart + 'T00:00:00')
+      : new Date(h.getFullYear(), h.getMonth(), 1, 0, 0, 0, 0);
+    const fim = filters.customEnd
+      ? new Date(filters.customEnd + 'T23:59:59.999')
+      : new Date(h.getFullYear(), h.getMonth(), h.getDate(), 23, 59, 59, 999);
+    if (!previous) return { start: ini, end: fim };
+    // Comparacao: a janela imediatamente anterior, com a mesma duracao.
+    const dur = fim.getTime() - ini.getTime();
+    const fimAnt = new Date(ini.getTime() - 1);
+    return { start: new Date(fimAnt.getTime() - dur), end: fimAnt };
+  }
   if (previous) {
     if (filters.compare) {
       // Side B: use dateB anchor if explicitly set, otherwise default to one period before dateA
@@ -2354,6 +2377,7 @@ function getPeriodLabel(period, previous, anchorDate) {
   const fmtMY  = d => String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
   const fmtS   = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
   const fmtDMY = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+  if (period==='custom')    return fmtDMY(start)+' a '+fmtDMY(end);
   if (period==='dia')       return fmtDMY(start);
   if (period==='semana')    return fmtS(start)+' a '+fmtS(end)+'/'+end.getFullYear();
   if (period==='mes')       return MONTHS[start.getMonth()]+' '+start.getFullYear();
@@ -2369,6 +2393,18 @@ function shiftPeriod(delta) {
   const anchor = getAnchorDate();
   const {start} = getPeriodRange(filters.period, false, anchor);
   const na = new Date(start);
+  if (filters.period === 'custom') {
+    // Avanca/recua a janela inteira, mantendo a duracao escolhida.
+    const {start: s, end: e} = getPeriodRange('custom', false);
+    // O fim e as 23:59:59.999, por isso a divisao ja da o numero de dias inteiros.
+    const dias = Math.round((e.getTime() - s.getTime()) / 86400000);
+    const ns = new Date(s); ns.setDate(ns.getDate() + delta * dias);
+    const ne = new Date(e); ne.setDate(ne.getDate() + delta * dias);
+    filters.customStart = toISODate(ns);
+    filters.customEnd   = toISODate(ne);
+    renderPeriodNavBar(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
+    return;
+  }
   if      (filters.period==='dia')       na.setDate(na.getDate()       + delta);
   else if (filters.period==='semana')    na.setDate(na.getDate()       + delta*7);
   else if (filters.period==='mes')       na.setMonth(na.getMonth()     + delta);
@@ -2387,6 +2423,18 @@ function resetPeriodAnchor() {
   renderCompareControlsBar();
   updateCompareBanner();
   renderActivePanel();
+}
+// Datas do periodo personalizado. Se a ordem for invertida, acompanha a outra
+// ponta em vez de deixar um intervalo vazio.
+function setCustomStart(val) {
+  filters.customStart = val || null;
+  if (filters.customStart && filters.customEnd && filters.customStart > filters.customEnd) filters.customEnd = filters.customStart;
+  renderPeriodNavBar(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
+}
+function setCustomEnd(val) {
+  filters.customEnd = val || null;
+  if (filters.customStart && filters.customEnd && filters.customEnd < filters.customStart) filters.customStart = filters.customEnd;
+  renderPeriodNavBar(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
 }
 function setAnchorFromInput(val) {
   filters.periodAnchor = val || null;
@@ -2415,6 +2463,24 @@ function renderPeriodNavBar() {
   if (p==='total') {
     el.style.display='flex'; el.className='period-nav-bar';
     el.innerHTML='<span class="pnb-label" style="min-width:unset;color:var(--grey)">Todo o período — sem filtro de datas</span>';
+    return;
+  }
+  if (p==='custom') {
+    const {start: cs2, end: ce2} = getPeriodRange('custom', false);
+    const f = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+    const dias = Math.round((ce2.getTime()-cs2.getTime())/86400000);
+    el.style.display='flex'; el.className='period-nav-bar';
+    el.innerHTML =
+      '<button class="pnb-arrow" onclick="shiftPeriod(-1)" title="Janela anterior">‹</button>'+
+      '<span class="pnb-label">'+escapeHtml(f(cs2)+' a '+f(ce2))+'</span>'+
+      '<button class="pnb-arrow" onclick="shiftPeriod(+1)" title="Janela seguinte">›</button>'+
+      '<div class="pnb-sep"></div>'+
+      '<span style="font-size:12px;color:var(--grey)">De</span>'+
+      '<input type="date" class="pnb-input" value="'+toISODate(cs2)+'" onchange="setCustomStart(this.value)" title="Data de início">'+
+      '<span style="font-size:12px;color:var(--grey)">até</span>'+
+      '<input type="date" class="pnb-input" value="'+toISODate(ce2)+'" onchange="setCustomEnd(this.value)" title="Data de fim">'+
+      '<div class="pnb-sep"></div>'+
+      '<span style="font-size:12px;color:var(--grey)">'+dias+(dias===1?' dia':' dias')+'</span>';
     return;
   }
   const anchor = getAnchorDate();
@@ -2479,6 +2545,12 @@ function setPeriod(p) {
     }
   } else {
     if (filters.period !== p) filters.periodAnchor = null; // reset anchor when switching type
+    if (p === 'custom' && (!filters.customStart || !filters.customEnd)) {
+      // Arranca no mes corrente, de dia 1 ate hoje.
+      const h = new Date();
+      filters.customStart = toISODate(new Date(h.getFullYear(), h.getMonth(), 1));
+      filters.customEnd   = toISODate(h);
+    }
     filters.period = (filters.period === p) ? '' : p;
     if (!filters.period) {
       filters.compare = false;
