@@ -7606,7 +7606,10 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     const _faltamJust = allApiLeads
       .filter(al => {
         const ex = byId['CLO-' + al.id];
-        return ex && String(ex.motivoPerdido || '').trim() === 'Outro' && _jaTem['CLO-' + al.id] === undefined;
+        if (!ex || String(ex.motivoPerdido || '').trim() !== 'Outro') return false;
+        // Junho sao as leads da campanha da Catolica e nao interessam a analise.
+        if (String(ex.dataCriacao || '').slice(0, 7) === '2026-06') return false;
+        return _jaTem['CLO-' + al.id] === undefined;
       })
       .map(al => al.id)
       .slice(0, JUST_CAP);
