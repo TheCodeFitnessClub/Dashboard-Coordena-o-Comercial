@@ -1648,6 +1648,7 @@ let state = {
   deletedLeadIds:[], deletedLeads:[],
   sourceDivergente:{},
   appVersao:null,       // build que gravou este estado (diagnostico)
+  justificacoesOutro:{}, // leadId -> notas escritas pelos comerciais (motivo "Outro"). Recolha temporaria.
   closumEspelho:null,    // leads do Closum do mes corrente tal como o Closum as tem (reconciliacao)   // leadId -> source que o Closum tem, quando difere da source bloqueada
 };
 let filters    = { unit:"", com:"", period:"total", compare:false, periodAnchor:null, customStart:null, customEnd:null, compareParams:{unitA:"",unitB:"",comA:"",comB:"",dateA:null,dateB:null} };
@@ -7595,6 +7596,26 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       const nnext = needsNotesPend.length ? (noff + room) % needsNotesPend.length : 0;
       try { localStorage.setItem('closum_notes_offset', String(nnext)); } catch(_) {}
     }
+    // ── RECOLHA TEMPORARIA: justificacoes do motivo "Outro" ────────────────
+    // O motivo "Outro" nao diz nada por si. O texto que o comercial escreveu
+    // esta nas notas da lead, que a dashboard le mas deita fora (so usa datas).
+    // Juntamos essas leads a fila das notas, em blocos, ate estarem todas.
+    // Quando a analise estiver feita, este bloco pode sair.
+    const JUST_CAP = 60;
+    const _jaTem = state.justificacoesOutro || (state.justificacoesOutro = {});
+    const _faltamJust = allApiLeads
+      .filter(al => {
+        const ex = byId['CLO-' + al.id];
+        return ex && String(ex.motivoPerdido || '').trim() === 'Outro' && _jaTem['CLO-' + al.id] === undefined;
+      })
+      .map(al => al.id)
+      .slice(0, JUST_CAP);
+    const _idsJust = new Set(_faltamJust);
+    if (_faltamJust.length) {
+      notesToFetch = notesToFetch.concat(_faltamJust.filter(id => !notesToFetch.includes(id)));
+      console.log('[Closum sync] Justificacoes "Outro" a recolher:', _faltamJust.length);
+    }
+
     if (notesToFetch.length) {
       console.log('[Closum sync] A buscar notas de', notesToFetch.length, 'leads (novas:', needsNotesNew.length, ')');
       for (let i = 0; i < notesToFetch.length; i += BATCH_SIZE) {
@@ -7603,12 +7624,24 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
           const nd = await fetchNotesWithRetry(id);
           const notes = nd?.responseData?.notes || nd?.responseData || [];
           if (Array.isArray(notes)) notesMap[id] = _parseLeadNotes(notes);
+          if (_idsJust.has(id) && Array.isArray(notes)) {
+            // Guardar so o que foi escrito por pessoas: as mensagens automaticas
+            // do Closum ("alterou o estado para...", "alterou o proprietario...")
+            // nao sao justificacoes.
+            const texto = notes
+              .map(n => String(n.note_message || '').trim())
+              .filter(m => m && !/alterou o (estado|propriet[áa]rio)/i.test(m) && !/^lead (criada|importada)/i.test(m))
+              .join(' | ')
+              .slice(0, 600);
+            state.justificacoesOutro['CLO-' + id] = texto;   // string vazia = lead sem justificacao escrita
+          }
         }));
         if (i + BATCH_SIZE < notesToFetch.length) await new Promise(r => setTimeout(r, BATCH_DELAY));
       }
     }
 
     progressoEcraSync('A actualizar a dashboard com ' + allApiLeads.length + ' leads…');
+    let changedJust = false;
     let novos = 0, atualizadas = 0;
     for (const al of allApiLeads) {
       const lid = 'CLO-' + al.id;
@@ -7838,13 +7871,14 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       const espelhoNovo = { mes: _mesEspelho, leads: _espelho };
       if (JSON.stringify(state.closumEspelho || null) !== JSON.stringify(espelhoNovo)) { state.closumEspelho = espelhoNovo; espelhoMudou = true; }
     }
-    if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0 || espelhoMudou) {
+    if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0 || espelhoMudou || changedJust) {
       saveState();
       renderAllForKey('leads');
     } else {
       renderLeadWarningNovo(); renderLeadWarning(); // re-evaluate even if no data changed
     }
 
+    if (_faltamJust.length) { changedJust = true; }
     state.appVersao = _versaoCarregada || '?';   // que build gravou este estado
     const now = getCurrentLocalDatetime();
     saveAPISettings({...s, lastSync: now, lastSyncNovos: novos, lastSyncAtualizadas: atualizadas});
