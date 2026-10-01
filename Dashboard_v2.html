@@ -7228,6 +7228,13 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     _syncInProgress = false;
     return;
   }
+  // Qualquer sincronizacao pedida pelo utilizador (silent=false) bloqueia a
+  // dashboard com o ecra de progresso. As automaticas, de fundo, nao mostram nada.
+  if (!silent) {
+    mostrarEcraSync(periodOpts && (periodOpts.dateFrom || periodOpts.dateTo)
+      ? 'A sincronizar ' + (periodOpts.dateFrom || '…') + ' a ' + (periodOpts.dateTo || '…')
+      : (forceAllSource ? 'Sincronização completa com o Closum' : 'A sincronizar com o Closum'));
+  }
   // Sync de período: dateFrom/dateTo restringem a janela e forçam reavaliação
   // completa (source + motivo) só dessas leads; nunca apaga leads fora do intervalo.
   const isPeriodSync = !!(periodOpts && (periodOpts.dateFrom || periodOpts.dateTo));
@@ -7393,7 +7400,9 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       const ex = byId[lid];
       const exHasSource = ex && ex.source && String(ex.source).trim() && ex.source !== 'Lead Digital';
       // forceAllSource (sync completa manual) → re-verifica a source de TODAS as leads.
-      if (!listingHasSource && (forceAllSource || !sourceBackfillDone || !exHasSource)) {
+      // Leads com a source bloqueada nunca a aceitam de volta: pedir o detalhe
+      // delas so gastava o orcamento de leituras e atrasava os motivos.
+      if (!listingHasSource && !sourceBloqueada(ex) && (forceAllSource || !sourceBackfillDone || !exHasSource)) {
         needsDetailSet.add(al.id);
         needsSource.add(al.id);
       }
@@ -7429,15 +7438,22 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     if (forceAllSource) {
       idsToFetch = needsDetail;
     } else {
+      // Os MOTIVOS vao sempre a frente e nunca entram na rotacao: sao poucos
+      // (leads acabadas de perder) e sem isto ficavam atras de milhares de
+      // pedidos de source, aparecendo na dashboard como "sem motivo" durante dias.
+      const idsMotivo = needsDetail.filter(id => needsMotivo.has(id));
+      const resto     = needsDetail.filter(id => !needsMotivo.has(id));
       let off = 0;
       try { off = parseInt(localStorage.getItem('closum_detail_offset') || '0', 10) || 0; } catch(_) {}
-      if (off >= needsDetail.length) off = 0;
-      idsToFetch = needsDetail.slice(off, off + maxFetch);
+      if (off >= resto.length) off = 0;
+      const espaco = Math.max(0, maxFetch - idsMotivo.length);
+      let janela = resto.slice(off, off + espaco);
       // Se o bloco final for curto, completar com o início da fila
-      if (idsToFetch.length < maxFetch && needsDetail.length > maxFetch) {
-        idsToFetch = idsToFetch.concat(needsDetail.slice(0, maxFetch - idsToFetch.length));
+      if (janela.length < espaco && resto.length > espaco) {
+        janela = janela.concat(resto.slice(0, espaco - janela.length));
       }
-      const nextOff = needsDetail.length ? (off + maxFetch) % needsDetail.length : 0;
+      idsToFetch = idsMotivo.concat(janela);
+      const nextOff = resto.length ? (off + espaco) % resto.length : 0;
       try { localStorage.setItem('closum_detail_offset', String(nextOff)); } catch(_) {}
       console.log('[Closum sync] Janela rotativa de detalhe:', off, '→', off + idsToFetch.length, 'de', needsDetail.length);
     }
@@ -7851,6 +7867,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     if (elStatus) elStatus.innerHTML = `<span style="color:var(--red)">✗ Erro: ${e.message}</span>`;
     if (!silent) showBanner(`❌ Erro sync Closum: ${e.message}`, 'error');
   } finally {
+    esconderEcraSync();          // sai sempre, mesmo em caso de erro
     _syncInProgress = false;
   }
 }
