@@ -2462,15 +2462,37 @@ function resetPeriodAnchor() {
 }
 // Datas do periodo personalizado. Se a ordem for invertida, acompanha a outra
 // ponta em vez de deixar um intervalo vazio.
+// NAO chamar renderPeriodNavBar() aqui: redesenhar a barra destroi o campo de
+// data que esta a ser editado e o utilizador perde o foco a meio. Actualizamos
+// apenas a etiqueta e o contador de dias.
+function _actualizarTextoCustom() {
+  const {start, end} = getPeriodRange('custom', false);
+  const f = d => String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+  const lbl = document.getElementById('pnb-custom-label');
+  if (lbl) lbl.textContent = f(start)+' a '+f(end);
+  const dias = Math.round((end.getTime()-start.getTime())/86400000);
+  const elD = document.getElementById('pnb-custom-dias');
+  if (elD) elD.textContent = dias + (dias===1 ? ' dia' : ' dias');
+}
 function setCustomStart(val) {
-  filters.customStart = val || null;
-  if (filters.customStart && filters.customEnd && filters.customStart > filters.customEnd) filters.customEnd = filters.customStart;
-  renderPeriodNavBar(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
+  if (!val) return;                        // campo a meio de ser escrito: ignorar
+  filters.customStart = val;
+  if (filters.customEnd && filters.customStart > filters.customEnd) {
+    filters.customEnd = filters.customStart;
+    const el = document.getElementById('pnb-custom-ate');
+    if (el) el.value = filters.customEnd;
+  }
+  _actualizarTextoCustom(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
 }
 function setCustomEnd(val) {
-  filters.customEnd = val || null;
-  if (filters.customStart && filters.customEnd && filters.customEnd < filters.customStart) filters.customStart = filters.customEnd;
-  renderPeriodNavBar(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
+  if (!val) return;
+  filters.customEnd = val;
+  if (filters.customStart && filters.customEnd < filters.customStart) {
+    filters.customStart = filters.customEnd;
+    const el = document.getElementById('pnb-custom-de');
+    if (el) el.value = filters.customStart;
+  }
+  _actualizarTextoCustom(); renderCompareControlsBar(); updateCompareBanner(); renderActivePanel();
 }
 function setAnchorFromInput(val) {
   filters.periodAnchor = val || null;
@@ -2508,15 +2530,15 @@ function renderPeriodNavBar() {
     el.style.display='flex'; el.className='period-nav-bar';
     el.innerHTML =
       '<button class="pnb-arrow" onclick="shiftPeriod(-1)" title="Janela anterior">‹</button>'+
-      '<span class="pnb-label">'+escapeHtml(f(cs2)+' a '+f(ce2))+'</span>'+
+      '<span class="pnb-label" id="pnb-custom-label">'+escapeHtml(f(cs2)+' a '+f(ce2))+'</span>'+
       '<button class="pnb-arrow" onclick="shiftPeriod(+1)" title="Janela seguinte">›</button>'+
       '<div class="pnb-sep"></div>'+
       '<span style="font-size:12px;color:var(--grey)">De</span>'+
-      '<input type="date" class="pnb-input" value="'+toISODate(cs2)+'" onchange="setCustomStart(this.value)" title="Data de início">'+
+      '<input type="date" class="pnb-input" id="pnb-custom-de" value="'+toISODate(cs2)+'" onchange="setCustomStart(this.value)" title="Data de início">'+
       '<span style="font-size:12px;color:var(--grey)">até</span>'+
-      '<input type="date" class="pnb-input" value="'+toISODate(ce2)+'" onchange="setCustomEnd(this.value)" title="Data de fim">'+
+      '<input type="date" class="pnb-input" id="pnb-custom-ate" value="'+toISODate(ce2)+'" onchange="setCustomEnd(this.value)" title="Data de fim">'+
       '<div class="pnb-sep"></div>'+
-      '<span style="font-size:12px;color:var(--grey)">'+dias+(dias===1?' dia':' dias')+'</span>';
+      '<span style="font-size:12px;color:var(--grey)" id="pnb-custom-dias">'+dias+(dias===1?' dia':' dias')+'</span>';
     return;
   }
   const anchor = getAnchorDate();
