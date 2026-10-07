@@ -5423,7 +5423,6 @@ function renderCancelamentos() {
   const pct = (n, base) => base > 0 ? (n / base * 100) : null;
   const fmt = v => v === null ? '—' : v.toFixed(1) + '%';
   const top = lista[0];
-  const voluntarios = total - involuntarios;
 
   // ── Cards ──
   let h = '<div class="socios-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">';
@@ -5435,7 +5434,6 @@ function renderCancelamentos() {
   h += card('Peso no churn', fmt(churnMedio), mesesComBase ? (nMeses > 1 ? 'média mensal de ' + nMeses + ' meses' : 'sobre os sócios início') : 'faltam os sócios início');
   h += card('Motivo principal', top.n, top.motivo + ' · ' + fmt(pct(top.n, total)));
   h += card('Falha de pagamento', involuntarios, fmt(pct(involuntarios, total)) + ' — cobrança, não comercial');
-  h += card('Decisão do sócio', voluntarios, fmt(pct(voluntarios, total)) + ' — motivo comercial');
   h += card('Excluídos', excluidos, 'USC, recuperados, erros, oferta');
   h += '</div>';
 
