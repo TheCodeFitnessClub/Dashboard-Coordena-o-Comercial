@@ -1512,7 +1512,9 @@ const SCHEMA = {
     { key:"unidade",      label:"Unidade",             type:"select", options:UNIDADES, w:170 },
     { key:"ativosInicio", label:"Ativos início",       type:"number",        w:110 },
     { key:"ativosFim",    label:"Ativos fim",          type:"number",        w:110 },
-    { key:"cancelamentos",label:"Cancelamentos",       type:"number",        w:120 },
+    // Cancelamentos: so de leitura. Vem do ficheiro do Cedis (ver a seccao
+    // "Cancelamentos por motivo"), para o numero e os motivos nunca divergirem.
+    { key:"cancelamentos",label:"Cancelamentos",       type:"computed",      w:120, compute:r=>(r.cancelamentos===''||r.cancelamentos==null)?'':r.cancelamentos },
     { key:"_crescimento", label:"Crescimento %",       type:"computedBadge", w:110, compute:r=>computeCrescimento(r), badgeClsFn:crescGoodCls },
     { key:"_churn",       label:"Churn %",             type:"computedBadge", w:100, compute:r=>computeChurn(r),       badgeClsFn:churnCls },
     { key:"_retencao",    label:"Retenção %",          type:"computedBadge", w:100, compute:r=>computeRetencao(r),    badgeClsFn:retCls },
