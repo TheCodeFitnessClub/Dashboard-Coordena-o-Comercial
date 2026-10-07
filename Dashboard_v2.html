@@ -932,7 +932,20 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div class="chart-wrap"><canvas id="chart-socios-churn"></canvas></div>
   </div>
 
+  <h2 class="section" style="margin-top:32px">Cancelamentos por motivo
+    <span class="actions">
+      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);display:inline-flex;align-items:center;gap:6px">
+        📥 Importar ficheiro do Cedis
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importCancelamentosCedis(this)">
+      </label>
+    </span>
+  </h2>
+  <div class="socios-nota" style="margin-top:-8px">Lista de cancelamentos exportada do Cedis. Ficam de fora USC, posteriormente recuperados, erros de operação e The Code Oferta. O total de cancelamentos da tabela acima passa a vir daqui.</div>
+  <div id="cancel-import-status" style="font-size:11px;color:var(--grey);margin-bottom:10px"></div>
+  <div id="cancel-display"></div>
+  <div class="chart-wrap" style="margin-top:18px;height:420px"><canvas id="chart-cancel-motivos"></canvas></div>
 </section>
+
 
 
 <!-- Modal reunião (criar / editar + ata) — mesmo desenho dos de tarefa e rotina -->
@@ -1396,6 +1409,26 @@ const KPI_LIST    = ["Tempo médio resp. (min)","% Chamadas atendidas","% Walk-i
 const TASK_STATUS = ["A fazer","Em curso","Feita"];
 const TASK_PRIO   = ["Alta","Média","Baixa"];
 
+// ── Cancelamentos (ficheiro do Cedis) ──────────────────────────────────────
+// Motivos que NAO sao perdas comerciais e por isso ficam fora das contas:
+// correccoes administrativas e o evento USC (172 dos 175 casos num so mes).
+const CANCEL_EXCLUIR = ['Posteriormente recuperada', 'The Code Oferta', 'Erro de Operação', 'USC'];
+// Cancelamentos que o socio nao decidiu: falha de pagamento. Separa-los do
+// resto e o que distingue um problema comercial de um problema de cobranca.
+const CANCEL_INVOLUNTARIOS = ['Pagamento em Atraso - Cancelamento Automatico', 'Inativação DD', 'Não mantêm a dívida'];
+// O Cedis escreve "Nova"; a dashboard usa o nome completo.
+const CANCEL_CLUBES = { 'nova': 'Universidade Nova', 'cidade universitaria': 'Cidade Universitária', 'saldanha': 'Saldanha' };
+const _cancelNorm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/s+/g,' ').trim();
+function cancelMotivoExcluido(m) {
+  const n = _cancelNorm(m);
+  return CANCEL_EXCLUIR.some(e => n.includes(_cancelNorm(e)));
+}
+// Um registo pode trazer varios motivos separados por virgula. A lead conta em
+// cada um deles, por isso as percentagens somam mais de 100%.
+function cancelMotivosDe(txt) {
+  return String(txt||'').split(',').map(s => s.trim()).filter(s => s && !cancelMotivoExcluido(s));
+}
+
 // Leads com estas tags no Closum sao de recrutamento, nao de venda: ficam
 // completamente fora da dashboard (contagens, graficos, KPIs, tudo).
 // A comparacao ignora acentos, maiusculas e espacos a mais.
@@ -1648,6 +1681,8 @@ let state = {
   deletedLeadIds:[], deletedLeads:[],
   sourceDivergente:{},
   appVersao:null,       // build que gravou este estado (diagnostico)
+  cancelMotivos:[],     // {periodo:'AAAA-MM', unidade, motivo, n} — importado do Cedis
+  cancelExcluidos:[],   // {periodo, unidade, n} — registos ignorados pelas regras
   justificacoesOutro:{}, // leadId -> notas escritas pelos comerciais (motivo "Outro"). Recolha temporaria.
   closumEspelho:null,    // leads do Closum do mes corrente tal como o Closum as tem (reconciliacao)   // leadId -> source que o Closum tem, quando difere da source bloqueada
 };
@@ -4945,6 +4980,7 @@ function renderSociosPanel() {
   renderTable("t-socios","socios");
   renderTable("t-cancelamentos","cancelamentos");
   renderSociosStats();
+  renderCancelamentos();
 }
 function getSociosAllPeriods() {
   const rows=[...state.socios].filter(r=>r.periodo);
@@ -5204,6 +5240,251 @@ function renderSociosStats() {
   document.getElementById("socios-stats").innerHTML=h;
   drawSociosCharts(allRows, rows);
 }
+// ── Cancelamentos: leitura do ficheiro do Cedis ────────────────────────────
+// O ficheiro tem uma folha com a lista detalhada (uma linha por cancelamento,
+// agrupada por clube em linhas "<Clube> - N Utente(s)") e outra com um resumo
+// por motivo. Usamos a detalhada: so ela tem clube e data.
+function _cancelDataParaMes(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0');
+  const s = String(v || '').trim();
+  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2];
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2];
+  return '';
+}
+function _cancelLerFolha(mat) {
+  let hi = -1, cData = -1, cMotivo = -1;
+  for (let i = 0; i < mat.length && hi < 0; i++) {
+    const row = mat[i] || [];
+    let d = -1, mo = -1;
+    row.forEach((cel, j) => {
+      const n = _cancelNorm(cel);
+      if (n.indexOf('dt.cancelamento') === 0 || n === 'data de cancelamento') d = j;
+      if (n === 'motivo' || n === 'motivo de cancelamento') mo = j;
+    });
+    if (d >= 0 && mo >= 0) { hi = i; cData = d; cMotivo = mo; }
+  }
+  if (hi < 0) return null;
+  const regs = [];
+  let clube = '';
+  for (let i = hi + 1; i < mat.length; i++) {
+    const row = mat[i] || [];
+    const cab = row.find(c => /utente\(s\)/i.test(String(c || '')));
+    if (cab) { clube = String(cab).split(' - ')[0].trim(); continue; }
+    const mes = _cancelDataParaMes(row[cData]);
+    const bruto = String(row[cMotivo] || '').trim();
+    if (!mes || !bruto) continue;
+    const unidade = CANCEL_CLUBES[_cancelNorm(clube)] || clube;
+    regs.push({ mes: mes, unidade: unidade, motivos: cancelMotivosDe(bruto) });
+  }
+  return regs;
+}
+function importCancelamentosCedis(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  if (!file) return;
+  const st = document.getElementById('cancel-import-status');
+  if (st) st.innerHTML = '<span style="color:var(--orange)">A processar…</span>';
+  const reader = new FileReader();
+  reader.onload = function (ev) {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellDates: true });
+      let regs = null;
+      for (const sn of wb.SheetNames) {
+        const mat = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false, defval: '' });
+        const r = _cancelLerFolha(mat);
+        if (r && r.length) { regs = r; break; }
+      }
+      if (!regs) {
+        showBanner('Não encontrei a lista de cancelamentos neste ficheiro (faltam as colunas Dt.Cancelamento e Motivo).', 'error');
+        if (st) st.innerHTML = '';
+        inputEl.value = '';
+        return;
+      }
+      // Cada registo conta UMA vez no total e uma vez em CADA motivo que traga.
+      const porMotivo = {}, totais = {}, excluidos = {};
+      const periodos = new Set();
+      regs.forEach(function (r) {
+        const chave = r.mes + '|' + r.unidade;
+        periodos.add(chave);
+        if (!r.motivos.length) { excluidos[chave] = (excluidos[chave] || 0) + 1; return; }
+        totais[chave] = (totais[chave] || 0) + 1;
+        r.motivos.forEach(function (m) { const k = chave + '|' + m; porMotivo[k] = (porMotivo[k] || 0) + 1; });
+      });
+      // Substitui apenas os periodos/clubes que vem no ficheiro; o resto fica.
+      const fora = r => !periodos.has(r.periodo + '|' + r.unidade);
+      state.cancelMotivos = (state.cancelMotivos || []).filter(fora);
+      state.cancelExcluidos = (state.cancelExcluidos || []).filter(fora);
+      Object.keys(porMotivo).forEach(function (k) {
+        const p = k.split('|');
+        state.cancelMotivos.push({ periodo: p[0], unidade: p[1], motivo: p[2], n: porMotivo[k] });
+      });
+      Object.keys(excluidos).forEach(function (k) {
+        const p = k.split('|');
+        state.cancelExcluidos.push({ periodo: p[0], unidade: p[1], n: excluidos[k] });
+      });
+      // O total de cancelamentos da aba Sócios passa a vir daqui.
+      state.socios = state.socios || [];
+      Object.keys(totais).forEach(function (k) {
+        const p = k.split('|');
+        let linha = state.socios.find(r => r.periodo === p[0] && r.unidade === p[1]);
+        if (!linha) { linha = { periodo: p[0], unidade: p[1], ativosInicio: '', ativosFim: '', cancelamentos: 0 }; state.socios.push(linha); }
+        linha.cancelamentos = totais[k];
+      });
+      saveState();
+      renderSociosPanel();
+      const soma = o => Object.keys(o).reduce((a, k) => a + o[k], 0);
+      const nTot = soma(totais), nExc = soma(excluidos);
+      const meses = [...new Set(regs.map(r => r.mes))].sort();
+      if (st) st.innerHTML = '<span style="color:var(--green)">' + nTot + ' cancelamentos · ' + nExc + ' excluídos · ' + meses[0] + ' a ' + meses[meses.length - 1] + '</span>';
+      showBanner('Cancelamentos importados: ' + nTot + ' (' + nExc + ' excluídos pelas regras).', 'success');
+    } catch (e) {
+      console.error('[cancelamentos] erro a importar:', e);
+      showBanner('Erro a ler o ficheiro: ' + e.message, 'error');
+      if (st) st.innerHTML = '';
+    }
+    inputEl.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Agrega os motivos respeitando o periodo da aba horizontal e o filtro de clube.
+// A percentagem sobre socios e calculada como MEDIA DAS TAXAS MENSAIS, igual ao
+// churn: somar 9 meses de cancelamentos e dividir pela base de um mes so daria
+// um numero sem significado (69% em vez de ~7,6%).
+function aggregateCancelamentos() {
+  const p = filters.period;
+  const meses = (!p || p === 'comparar' || p === 'total') ? null : getPeriodMonths(p, false);
+  const unidF = filters.unit;
+  const serve = r => (!meses || meses.includes(r.periodo)) && (!unidF || r.unidade === unidF);
+
+  const porMes = {};   // periodo -> { ativos, total, motivos:{} }
+  const mes = p2 => (porMes[p2] = porMes[p2] || { ativos: 0, total: 0, motivos: {} });
+  (state.socios || []).filter(r => r.periodo && serve(r)).forEach(function (r) {
+    const m = mes(r.periodo);
+    m.ativos += Number(r.ativosInicio) || 0;
+    m.total  += Number(r.cancelamentos) || 0;
+  });
+  (state.cancelMotivos || []).filter(serve).forEach(function (r) {
+    const m = mes(r.periodo);
+    m.motivos[r.motivo] = (m.motivos[r.motivo] || 0) + (Number(r.n) || 0);
+  });
+
+  const motivos = {};
+  let total = 0;
+  Object.keys(porMes).forEach(function (k) {
+    total += porMes[k].total;
+    Object.keys(porMes[k].motivos).forEach(function (mo) {
+      motivos[mo] = (motivos[mo] || 0) + porMes[k].motivos[mo];
+    });
+  });
+  const excluidos = (state.cancelExcluidos || []).filter(serve).reduce((a, r) => a + (Number(r.n) || 0), 0);
+
+  // Media das taxas mensais: so conta meses com base conhecida.
+  const comBase = Object.keys(porMes).filter(k => porMes[k].ativos > 0);
+  const taxaMedia = function (fn) {
+    if (!comBase.length) return null;
+    const taxas = comBase.map(k => fn(porMes[k]) / porMes[k].ativos * 100);
+    return taxas.reduce((a, b) => a + b, 0) / taxas.length;
+  };
+  const churnMedio = taxaMedia(m => m.total);
+  const involuntarios = Object.keys(motivos)
+    .filter(m => CANCEL_INVOLUNTARIOS.some(x => _cancelNorm(x) === _cancelNorm(m)))
+    .reduce((a, m) => a + motivos[m], 0);
+  const lista = Object.keys(motivos).map(m => ({
+    motivo: m,
+    n: motivos[m],
+    taxa: taxaMedia(x => x.motivos[m] || 0),
+  })).sort((a, b) => b.n - a.n);
+
+  return { lista: lista, total: total, excluidos: excluidos, involuntarios: involuntarios,
+           churnMedio: churnMedio, nMeses: Object.keys(porMes).length, mesesComBase: comBase.length };
+}
+
+// ── Cancelamentos por motivo: cards, tabela e grafico ──────────────────────
+// Um cancelamento pode trazer varios motivos, por isso a soma das linhas e
+// maior do que o total e as percentagens somam mais de 100%. E intencional:
+// a decisao foi contar a lead em cada motivo que apresente.
+function renderCancelamentos() {
+  const el = document.getElementById('cancel-display');
+  if (!el) return;
+  const { lista, total, excluidos, involuntarios, churnMedio, nMeses, mesesComBase } = aggregateCancelamentos();
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty">Sem cancelamentos no período. Importa o ficheiro do Cedis para preencher.</div>';
+    if (charts.cancelMotivos) { charts.cancelMotivos.destroy(); charts.cancelMotivos = null; }
+    return;
+  }
+  const pct = (n, base) => base > 0 ? (n / base * 100) : null;
+  const fmt = v => v === null ? '—' : v.toFixed(1) + '%';
+  const top = lista[0];
+  const voluntarios = total - involuntarios;
+
+  // ── Cards ──
+  let h = '<div class="socios-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">';
+  const card = (lbl, val, sub, cls) =>
+    '<div class="socios-single-card"><div class="club">' + escapeHtml(lbl) + '</div>' +
+    '<div class="big-val"' + (cls ? ' style="color:' + cls + '"' : '') + '>' + escapeHtml(String(val)) + '</div>' +
+    '<div class="big-sub">' + escapeHtml(sub) + '</div></div>';
+  h += card('Cancelamentos', total, 'no período, após exclusões');
+  h += card('Peso no churn', fmt(churnMedio), mesesComBase ? (nMeses > 1 ? 'média mensal de ' + nMeses + ' meses' : 'sobre os sócios início') : 'faltam os sócios início');
+  h += card('Motivo principal', top.n, top.motivo + ' · ' + fmt(pct(top.n, total)));
+  h += card('Falha de pagamento', involuntarios, fmt(pct(involuntarios, total)) + ' — cobrança, não comercial');
+  h += card('Decisão do sócio', voluntarios, fmt(pct(voluntarios, total)) + ' — motivo comercial');
+  h += card('Excluídos', excluidos, 'USC, recuperados, erros, oferta');
+  h += '</div>';
+
+  // ── Tabela ──
+  h += '<div class="tbl-wrap" style="margin-top:18px"><table class="tbl"><thead><tr>' +
+       '<th>Motivo</th><th style="text-align:right">Nº</th>' +
+       '<th style="text-align:right">% dos cancelamentos</th>' +
+       '<th style="text-align:right">% dos sócios (média mensal)</th></tr></thead><tbody>';
+  lista.forEach(r => {
+    const inv = CANCEL_INVOLUNTARIOS.some(x => _cancelNorm(x) === _cancelNorm(r.motivo));
+    h += '<tr>' +
+      '<td style="padding:6px 10px">' + escapeHtml(r.motivo) +
+        (inv ? ' <span style="font-size:10px;color:var(--grey)">· falha de pagamento</span>' : '') + '</td>' +
+      '<td style="padding:6px 10px;text-align:right;font-weight:600">' + r.n + '</td>' +
+      '<td style="padding:6px 10px;text-align:right">' + fmt(pct(r.n, total)) + '</td>' +
+      '<td style="padding:6px 10px;text-align:right">' + fmt(r.taxa) + '</td>' +
+    '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '<div class="socios-nota" style="margin-top:10px">Um cancelamento pode ter mais do que um motivo, por isso as percentagens somam mais de 100%.</div>';
+  el.innerHTML = h;
+
+  // ── Grafico: barras ordenadas ──
+  const ctx = document.getElementById('chart-cancel-motivos');
+  if (!ctx) return;
+  if (charts.cancelMotivos) charts.cancelMotivos.destroy();
+  const cor = getComputedStyle(document.body).getPropertyValue('--orange').trim() || '#F97316';
+  const corInv = '#A855F7';
+  charts.cancelMotivos = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: lista.map(r => r.motivo),
+      datasets: [{
+        label: 'Cancelamentos',
+        data: lista.map(r => r.n),
+        backgroundColor: lista.map(r => CANCEL_INVOLUNTARIOS.some(x => _cancelNorm(x) === _cancelNorm(r.motivo)) ? corInv : cor),
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: 'Cancelamentos por motivo' },
+        subtitle: { display: true, text: 'roxo = falha de pagamento', color: getComputedStyle(document.body).getPropertyValue('--grey').trim() || '#6B7B8D', padding: { bottom: 10 } },
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ' ' + c.parsed.x + (total ? ' · ' + (c.parsed.x / total * 100).toFixed(1) + '% dos cancelamentos' : '') } }
+      },
+      scales: { x: { beginAtZero: true, grid: { display: false } }, y: { grid: { display: false } } }
+    }
+  });
+}
+
 function drawSociosCharts(allRows, selRows) {
   const ctx1=document.getElementById("chart-socios-evol");
   const ctx2=document.getElementById("chart-socios-churn");
