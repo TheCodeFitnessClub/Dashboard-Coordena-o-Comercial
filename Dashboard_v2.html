@@ -5332,7 +5332,11 @@ function importCancelamentosCedis(inputEl) {
         linha.cancelamentos = totais[k];
       });
       saveState();
+      // Tudo o que depende de cancelamentos: tabela de socios, churn, retencao,
+      // crescimento, graficos e os cards do painel activo.
       renderSociosPanel();
+      renderAllForKey('socios');
+      populateFilters();
       const soma = o => Object.keys(o).reduce((a, k) => a + o[k], 0);
       const nTot = soma(totais), nExc = soma(excluidos);
       const meses = [...new Set(regs.map(r => r.mes))].sort();
@@ -5455,6 +5459,9 @@ function renderCancelamentos() {
   // ── Grafico: barras ordenadas ──
   const ctx = document.getElementById('chart-cancel-motivos');
   if (!ctx) return;
+  // Altura conforme o numero de motivos, senao as barras ficam esmagadas.
+  const wrap = ctx.closest('.chart-wrap');
+  if (wrap) wrap.style.height = Math.max(320, lista.length * 30 + 90) + 'px';
   if (charts.cancelMotivos) charts.cancelMotivos.destroy();
   const cor = getComputedStyle(document.body).getPropertyValue('--orange').trim() || '#F97316';
   const corInv = '#A855F7';
@@ -5480,7 +5487,12 @@ function renderCancelamentos() {
         legend: { display: false },
         tooltip: { callbacks: { label: c => ' ' + c.parsed.x + (total ? ' · ' + (c.parsed.x / total * 100).toFixed(1) + '% dos cancelamentos' : '') } }
       },
-      scales: { x: { beginAtZero: true, grid: { display: false } }, y: { grid: { display: false } } }
+      scales: {
+        x: { beginAtZero: true, grid: { display: false } },
+        // Sem isto herda o limite global de 6 etiquetas por eixo e a maioria
+        // dos motivos fica sem nome.
+        y: { grid: { display: false }, ticks: { autoSkip: false, maxTicksLimit: 60, font: { size: 11 } } }
+      }
     }
   });
 }
