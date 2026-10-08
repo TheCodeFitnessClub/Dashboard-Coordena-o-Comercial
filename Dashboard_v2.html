@@ -7593,28 +7593,36 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     _descobrirCampoSource(allApiLeads);
 
     // ── Diagnostico da listagem ────────────────────────────────────────────
-    // Para saber se a listagem do Closum traz mesmo a source ou se mudou de
-    // sitio. Guarda so NOMES de campos, nunca valores de clientes.
+    // A listagem traz source_id e custom_data. Descobrir o que sao: cruzamos o
+    // source_id com a source ja guardada nas leads que a conhecem, para extrair
+    // o mapa id -> nome. Guarda so nomes e contagens, nunca dados de clientes.
     if (!isPeriodSync && allApiLeads.length) {
-      const amostra = allApiLeads[0];
-      const vars = {};
-      allApiLeads.slice(0, 50).forEach(function (al) {
-        ['custom_fields', 'custom_data', 'fields', 'lead_custom_fields', 'customFields'].forEach(function (prop) {
-          if (!Array.isArray(al[prop])) return;
-          al[prop].forEach(function (f) {
-            const nome = prop + '.' + String((f && f.var) || (f && f.name) || '?');
-            vars[nome] = vars[nome] || { n: 0, comValor: 0 };
-            vars[nome].n++;
-            if (f && String(f.value == null ? '' : f.value).trim()) vars[nome].comValor++;
-          });
-        });
+      const amostra = allApiLeads[0] || {};
+      const cd = amostra.custom_data;
+      const mapa = {};          // source_id -> { source guardada: n }
+      const semId = { n: 0 };
+      allApiLeads.forEach(function (al) {
+        const ex = byId['CLO-' + al.id];
+        const sid = (al.source_id === null || al.source_id === undefined || al.source_id === '') ? '(vazio)' : String(al.source_id);
+        if (sid === '(vazio)') semId.n++;
+        const guardada = ex && String(ex.source || '').trim() ? ex.source : '(sem source na dashboard)';
+        mapa[sid] = mapa[sid] || {};
+        mapa[sid][guardada] = (mapa[sid][guardada] || 0) + 1;
       });
       state.diagListagem = {
         geradoEm: getCurrentLocalDatetime(),
         leads: allApiLeads.length,
-        chavesDaLead: Object.keys(amostra || {}).sort(),
-        camposPersonalizados: Object.keys(vars).sort().map(k => k + ' (' + vars[k].comValor + '/' + vars[k].n + ' com valor)'),
-        campoSourceDescoberto: _sourceVarDescoberta || '(nenhum)',
+        chavesDaLead: Object.keys(amostra).sort(),
+        customDataTipo: Array.isArray(cd) ? 'lista(' + cd.length + ')' : (cd === null ? 'null' : typeof cd),
+        customDataChaves: (cd && typeof cd === 'object' && !Array.isArray(cd)) ? Object.keys(cd).slice(0, 40) : [],
+        customDataExemplo: (cd && typeof cd === 'object') ? JSON.stringify(cd).slice(0, 400) : String(cd).slice(0, 200),
+        leadsSemSourceId: semId.n,
+        mapaSourceId: Object.keys(mapa).sort().map(function (k) {
+          const dentro = mapa[k];
+          const top = Object.keys(dentro).sort((a, b) => dentro[b] - dentro[a]).slice(0, 4)
+            .map(nome => nome + ' ' + dentro[nome]);
+          return 'source_id=' + k + ' -> ' + top.join(' | ');
+        }),
       };
     }
 
