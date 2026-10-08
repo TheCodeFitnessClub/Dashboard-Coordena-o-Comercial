@@ -1682,6 +1682,7 @@ let state = {
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   deletedLeadIds:[], deletedLeads:[],
   sourceDivergente:{},
+  diagListagem:null,   // nomes dos campos que a listagem do Closum traz (diagnostico)
   appVersao:null,       // build que gravou este estado (diagnostico)
   cancelMotivos:[],     // {periodo:'AAAA-MM', unidade, motivo, n} — importado do Cedis
   cancelExcluidos:[],   // {periodo, unidade, n} — registos ignorados pelas regras
@@ -7591,6 +7592,32 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Descobrir em que campo o Closum guarda a source (ver extractSourceFromCustom).
     _descobrirCampoSource(allApiLeads);
 
+    // ── Diagnostico da listagem ────────────────────────────────────────────
+    // Para saber se a listagem do Closum traz mesmo a source ou se mudou de
+    // sitio. Guarda so NOMES de campos, nunca valores de clientes.
+    if (!isPeriodSync && allApiLeads.length) {
+      const amostra = allApiLeads[0];
+      const vars = {};
+      allApiLeads.slice(0, 50).forEach(function (al) {
+        ['custom_fields', 'custom_data', 'fields', 'lead_custom_fields', 'customFields'].forEach(function (prop) {
+          if (!Array.isArray(al[prop])) return;
+          al[prop].forEach(function (f) {
+            const nome = prop + '.' + String((f && f.var) || (f && f.name) || '?');
+            vars[nome] = vars[nome] || { n: 0, comValor: 0 };
+            vars[nome].n++;
+            if (f && String(f.value == null ? '' : f.value).trim()) vars[nome].comValor++;
+          });
+        });
+      });
+      state.diagListagem = {
+        geradoEm: getCurrentLocalDatetime(),
+        leads: allApiLeads.length,
+        chavesDaLead: Object.keys(amostra || {}).sort(),
+        camposPersonalizados: Object.keys(vars).sort().map(k => k + ' (' + vars[k].comValor + '/' + vars[k].n + ' com valor)'),
+        campoSourceDescoberto: _sourceVarDescoberta || '(nenhum)',
+      };
+    }
+
     // Espelho do Closum do mes corrente: nome, criacao, source e tags de cada lead
     // TAL COMO o Closum as tem, antes de qualquer filtro (tombstone, recrutamento).
     // Permite reconciliar os cards com o Closum sem ir la. So em sync completo da
@@ -8181,6 +8208,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     if (!isPeriodSync) {
       const espelhoNovo = { mes: _mesEspelho, leads: _espelho };
       if (JSON.stringify(state.closumEspelho || null) !== JSON.stringify(espelhoNovo)) { state.closumEspelho = espelhoNovo; espelhoMudou = true; }
+      espelhoMudou = true;   // grava tambem o diagnostico da listagem
     }
     if (novos > 0 || atualizadas > 0 || removedApagadas > 0 || removidasPorTag > 0 || espelhoMudou || changedJust) {
       saveState();
