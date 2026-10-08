@@ -7754,21 +7754,36 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       // Os MOTIVOS vao sempre a frente e nunca entram na rotacao: sao poucos
       // (leads acabadas de perder) e sem isto ficavam atras de milhares de
       // pedidos de source, aparecendo na dashboard como "sem motivo" durante dias.
-      const idsMotivo = needsDetail.filter(id => needsMotivo.has(id));
-      const resto     = needsDetail.filter(id => !needsMotivo.has(id));
+      // Prioridades fixas, fora da rotacao:
+      //  1) motivos de negocio perdido (poucos, e o que se quer ver no dia);
+      //  2) leads RECENTES sem source. Sem isto competiam com ~2900 leads
+      //     antigas que ficaram como "Lead Digital" e que nunca vao ter source:
+      //     a rotacao podia demorar dias a chegar a uma lead de ontem, e foi
+      //     assim que 7 REFS de Outubro ficaram por classificar.
+      const CANCEL_DIAS_RECENTE = 21;
+      const limiteRecente = new Date(Date.now() - CANCEL_DIAS_RECENTE * 86400000);
+      const recenteSet = new Set();
+      allApiLeads.forEach(function (al) {
+        if (!needsDetailSet.has(al.id) || needsMotivo.has(al.id)) return;
+        const t = new Date(String(al.creation_date).replace(' ', 'T')).getTime();
+        if (!isNaN(t) && t >= limiteRecente.getTime()) recenteSet.add(al.id);
+      });
+      const idsMotivo  = needsDetail.filter(id => needsMotivo.has(id));
+      const idsRecente = needsDetail.filter(id => recenteSet.has(id));
+      const resto      = needsDetail.filter(id => !needsMotivo.has(id) && !recenteSet.has(id));
       let off = 0;
       try { off = parseInt(localStorage.getItem('closum_detail_offset') || '0', 10) || 0; } catch(_) {}
       if (off >= resto.length) off = 0;
-      const espaco = Math.max(0, maxFetch - idsMotivo.length);
+      const espaco = Math.max(0, maxFetch - idsMotivo.length - idsRecente.length);
       let janela = resto.slice(off, off + espaco);
       // Se o bloco final for curto, completar com o início da fila
       if (janela.length < espaco && resto.length > espaco) {
         janela = janela.concat(resto.slice(0, espaco - janela.length));
       }
-      idsToFetch = idsMotivo.concat(janela);
+      idsToFetch = idsMotivo.concat(idsRecente, janela);
       const nextOff = resto.length ? (off + espaco) % resto.length : 0;
       try { localStorage.setItem('closum_detail_offset', String(nextOff)); } catch(_) {}
-      console.log('[Closum sync] Janela rotativa de detalhe:', off, '→', off + idsToFetch.length, 'de', needsDetail.length);
+      console.log('[Closum sync] Detalhe:', idsMotivo.length, 'motivos +', idsRecente.length, 'recentes +', janela.length, 'da rotação, de', needsDetail.length, 'em fila');
     }
     const BATCH_SIZE = 4;     // reduzido de 10 → 4 para evitar 502
     const BATCH_DELAY = 150;  // 150ms entre batches (gentil com o proxy)
