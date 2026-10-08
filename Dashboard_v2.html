@@ -7599,10 +7599,13 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     if (!isPeriodSync && allApiLeads.length) {
       const amostra = allApiLeads[0] || {};
       const cd = amostra.custom_data;
+      // Indice proprio: o byId do sync so e criado mais a frente.
+      const _idx = {};
+      (state.leads || []).forEach(function (l) { if (l.leadId) _idx[l.leadId] = l; });
       const mapa = {};          // source_id -> { source guardada: n }
       const semId = { n: 0 };
       allApiLeads.forEach(function (al) {
-        const ex = byId['CLO-' + al.id];
+        const ex = _idx['CLO-' + al.id];
         const sid = (al.source_id === null || al.source_id === undefined || al.source_id === '') ? '(vazio)' : String(al.source_id);
         if (sid === '(vazio)') semId.n++;
         const guardada = ex && String(ex.source || '').trim() ? ex.source : '(sem source na dashboard)';
