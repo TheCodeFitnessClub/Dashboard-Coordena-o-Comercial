@@ -1682,6 +1682,7 @@ let state = {
   customCols:{}, metasVersion:0, gcalEnabled:false, darkMode:false,
   deletedLeadIds:[], deletedLeads:[],
   sourceDivergente:{},
+  diagEmFalta:null,    // leads do Closum que nao estao na dashboard (diagnostico)
   appVersao:null,       // build que gravou este estado (diagnostico)
   cancelMotivos:[],     // {periodo:'AAAA-MM', unidade, motivo, n} — importado do Cedis
   cancelExcluidos:[],   // {periodo, unidade, n} — registos ignorados pelas regras
@@ -7591,6 +7592,19 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Descobrir em que campo o Closum guarda a source (ver extractSourceFromCustom).
     _descobrirCampoSource(allApiLeads);
 
+    // ── Diagnostico: leads do Closum que nao estao na dashboard ────────────
+    // Guarda o retrato da recolha ANTES de qualquer filtro, para no fim se poder
+    // dizer quais ficaram de fora e porque. Temporario.
+    const _retratoClosum = allApiLeads.map(function (l) {
+      return {
+        id: l.id,
+        nome: String(l.name || '').trim(),
+        criada: String(l.creation_date || '').slice(0, 16),
+        sourceId: (l.source_id === null || l.source_id === undefined) ? '' : String(l.source_id),
+        tags: (Array.isArray(l.contact_tag) ? l.contact_tag : []).map(_labelTag).filter(Boolean).join(' | '),
+      };
+    });
+
     // Espelho do Closum do mes corrente: nome, criacao, source e tags de cada lead
     // TAL COMO o Closum as tem, antes de qualquer filtro (tombstone, recrutamento).
     // Permite reconciliar os cards com o Closum sem ir la. So em sync completo da
@@ -8178,6 +8192,33 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     _leadWarningDismissed = false;
     _leadWarningNovoDismissed = false;
     let espelhoMudou = false;
+    // ── Diagnostico: quais ficaram de fora e porque ────────────────────────
+    if (!isPeriodSync && _retratoClosum.length) {
+      const presentes = new Set((state.leads || []).map(l => l.leadId));
+      const apagadas = new Set(state.deletedLeadIds || []);
+      const emFalta = _retratoClosum.filter(r => !presentes.has('CLO-' + r.id));
+      const porMotivo = {};
+      const lista = emFalta.map(function (r) {
+        const lid = 'CLO-' + r.id;
+        let motivo;
+        if (apagadas.has(lid)) motivo = 'apagada na dashboard';
+        else if (temTagExcluida({ contact_tag: r.tags ? r.tags.split(' | ').map(t => ({ tag: { tag: t } })) : [] })) motivo = 'tag de recrutamento';
+        else motivo = 'desconhecido';
+        porMotivo[motivo] = (porMotivo[motivo] || 0) + 1;
+        return { id: lid, nome: r.nome, criada: r.criada, sourceId: r.sourceId, tags: r.tags, motivo: motivo };
+      });
+      state.diagEmFalta = {
+        geradoEm: getCurrentLocalDatetime(),
+        noClosum: _retratoClosum.length,
+        naDashboard: (state.leads || []).length,
+        emFalta: emFalta.length,
+        porMotivo: porMotivo,
+        lista: lista.slice(0, 200),
+      };
+      espelhoMudou = true;   // garante que o diagnostico e gravado
+    }
+
+
     if (!isPeriodSync) {
       const espelhoNovo = { mes: _mesEspelho, leads: _espelho };
       if (JSON.stringify(state.closumEspelho || null) !== JSON.stringify(espelhoNovo)) { state.closumEspelho = espelhoNovo; espelhoMudou = true; }
