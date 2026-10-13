@@ -3660,7 +3660,8 @@ function aggregateLeadDigitalConv(previous) {
     baseRows = baseRows.filter(r => membros.includes(r.comercial));
   }
   if (comF) baseRows = baseRows.filter(r => r.comercial === comF);
-  baseRows = baseRows.filter(r => normalizeSource(r.source) === 'Leads Ads');
+  baseRows = baseRows.filter(r => normalizeSource(r.source) === 'Leads Ads'
+                             && String(dataCriacaoLead(r)).slice(0,10) >= ADS_DESDE);
 
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
@@ -4285,6 +4286,10 @@ function renderVendasDashChart() {
 const SOURCE_COLORS = ['#F97316','#A855F7','#22C55E','#60A5FA','#FBBF24','#F87171','#FB923C','#94A3B8','#34D399','#C084FC'];
 // Lista fixa de sources que aparecem SEMPRE como card (mesmo com 0 leads).
 // "LEADS" do Closum é renomeado para "Contacto Direto Clube" via normalizeSource()
+// Antes da dashboard existir (03/05/2026, inicio da Iris e do Diogo) as sources
+// nao eram preenchidas de forma fiavel. Essas leads continuam no Total de Leads
+// mas ficam FORA do card "Leads Ads", que de outra forma seria so ruido antigo.
+const ADS_DESDE = '2026-05-03';
 const SOURCE_BASELINE = [
   'Leads Ads',
   'Website',
@@ -4332,13 +4337,18 @@ function aggregateSources(previous) {
   const stats = {};
   sources.forEach(s => stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 });
 
+  const adsAntigas = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
   noPeriodo.forEach(r => {
     const s = normalizeSource(r.source);
-    if (!stats[s]) stats[s] = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
-    if (isWonSeq(r.sequencia))       stats[s].ganhos++;
-    else if (isLostSeq(r.sequencia)) stats[s].perdidos++;
-    else                             stats[s].emCurso++;
-    stats[s].qty++;
+    // Leads sem source anteriores ao arranque da dashboard: contam no total,
+    // nao no card Leads Ads.
+    const balde = (s === 'Leads Ads' && String(dataCriacaoLead(r)).slice(0,10) < ADS_DESDE)
+      ? adsAntigas
+      : (stats[s] = stats[s] || { qty:0, ganhos:0, perdidos:0, emCurso:0 });
+    if (isWonSeq(r.sequencia))       balde.ganhos++;
+    else if (isLostSeq(r.sequencia)) balde.perdidos++;
+    else                             balde.emCurso++;
+    balde.qty++;
   });
 
   // Card "Tombstone": leads apagadas na dashboard (respeitam clube/comercial e
@@ -4360,14 +4370,14 @@ function aggregateSources(previous) {
     stats['Tombstone'].qty++;
   });
 
-  const totalQty = Object.values(stats).reduce((a,v)=>a+v.qty,0);
-  return { sources, stats, totalQty };
+  const totalQty = Object.values(stats).reduce((a,v)=>a+v.qty,0) + adsAntigas.qty;
+  return { sources, stats, totalQty, adsAntigas };
 }
 
 function renderConvSourceDisplay() {
   const el = document.getElementById('conv-source-display');
   if (!el) return;
-  const { sources, stats } = aggregateSources(false);
+  const { sources, stats, adsAntigas } = aggregateSources(false);
 
   // Card "Total de Leads": soma de todas as sources reais. O "Tombstone"
   // (leads apagadas na dashboard) fica de fora — nao sao leads do funil.
@@ -4378,6 +4388,7 @@ function renderConvSourceDisplay() {
     if (!st) return;
     _tot.qty += st.qty; _tot.ganhos += st.ganhos; _tot.perdidos += st.perdidos; _tot.emCurso += st.emCurso;
   });
+  _tot.qty += adsAntigas.qty; _tot.ganhos += adsAntigas.ganhos; _tot.perdidos += adsAntigas.perdidos; _tot.emCurso += adsAntigas.emCurso;
   const _pc = (n) => _tot.qty > 0 ? Math.round(n / _tot.qty * 100) : 0;
   const cardTotal =
     '<div class="kpi" style="border-left:3px solid var(--orange)">' +
