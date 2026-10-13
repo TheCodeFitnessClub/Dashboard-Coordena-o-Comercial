@@ -6597,25 +6597,6 @@ function showBanner(text, type) {
 }
 
 // ── Vendas rápidas ─────────────────────────────────────────
-function addVendaRapida(unidadePreset) {
-  const membro = unidadePreset
-    ? (state.equipa||[]).find(e => e.unidade===unidadePreset && (!e.estado||e.estado==="Ativo"))
-    : null;
-  const r = {
-    data:      _isoLocal(),
-    unidade:   unidadePreset || "",
-    comercial: membro ? (membro.comercial||"") : "",
-    qtd:       1,
-    notas:     "",
-  };
-  if (!state.vendasExtras) state.vendasExtras = [];
-  state.vendasExtras.push(r);
-  saveState();
-  renderObjetivos();
-  // Scroll to the vendas extras table
-  setTimeout(()=>{ const el=document.getElementById("t-vendas-extras"); if(el) el.scrollIntoView({behavior:"smooth",block:"nearest"}); }, 100);
-}
-
 // ── Dias úteis (Seg-Sex) entre duas datas, inclusive ──────
 function countWorkdays(from, to) {
   let count = 0;
@@ -6770,8 +6751,6 @@ function renderObjetivos() {
         '<hr class="obj-rate-sep"><div class="obj-rate-block"><div style="font-size:12px;color:var(--green);font-weight:600;text-align:center;padding:6px 0">🎯 Objetivo atingido!</div></div>'
       : "") +
       vsHtml +
-      '<hr class="obj-rate-sep" style="margin-top:10px">'+
-      '<button onclick="addVendaRapida(\''+escapeHtml(d.u)+'\')" style="width:100%;margin-top:10px;padding:7px;background:var(--orange);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Registar venda</button>'+
       '</div>';
   }).join("");
 
