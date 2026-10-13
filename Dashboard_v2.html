@@ -1434,7 +1434,10 @@ function cancelMotivosDe(txt) {
 // A comparacao ignora acentos, maiusculas e espacos a mais.
 // NAO entram na tombstone de propósito — tirar a tag no Closum, ou uma entrada
 // desta lista, e a lead volta a aparecer no sync seguinte. Nada se perde.
-const TAGS_EXCLUIDAS = ["Recrutamento Gym Support", "Recrutamento Comercial"];
+const TAGS_EXCLUIDAS = ["Recrutamento Gym Support", "Recrutamento Comercial", "recrutamento-pt-setembro"];
+// Estas tags levam o mes no nome (recrutamento-pt-setembro, -outubro, ...).
+// Sem esta regra era preciso vir aqui todos os meses.
+const TAGS_EXCLUIDAS_PREFIXO = ["recrutamento-pt-"];
 const _normTag = s => String(s == null ? '' : s)
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1448,7 +1451,12 @@ function _labelTag(t) {
 }
 function temTagExcluida(apiLead) {
   const tags = Array.isArray(apiLead && apiLead.contact_tag) ? apiLead.contact_tag : [];
-  return tags.some(t => _TAGS_EXCLUIDAS_SET.has(_normTag(_labelTag(t))));
+  return tags.some(function (t) {
+    const n = _normTag(_labelTag(t));
+    if (!n) return false;
+    if (_TAGS_EXCLUIDAS_SET.has(n)) return true;
+    return TAGS_EXCLUIDAS_PREFIXO.some(p => n.indexOf(_normTag(p)) === 0);
+  });
 }
 
 // ── Schema ─────────────────────────────────────────────────
