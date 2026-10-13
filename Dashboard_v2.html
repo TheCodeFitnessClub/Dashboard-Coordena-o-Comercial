@@ -834,7 +834,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     <div id="lead-seq-states" class="grid" style="margin-bottom:18px"></div>
     <div class="dash-section-label" style="display:flex;align-items:center;gap:8px">
       Conversão por Source
-      <span title="Como se calcula (igual ao Closum):&#10;&#10;• Cada lead é atribuída ao período pela DATA REAL DE CRIAÇÃO no Closum. A data de fecho não é usada.&#10;&#10;• Cada lead conta UMA vez, no bucket do seu estado ATUAL:&#10;   – Ganho → Ganhos&#10;   – Perdido → Perdidos&#10;   – Qualquer outro (Novo, Follow-up, etc.) → Em curso&#10;&#10;• Qty = Ganhos + Perdidos + Em curso&#10;• As percentagens dos 3 sub-valores são calculadas sobre a Qty da source&#10;&#10;• O gráfico usa uma fórmula diferente:&#10;   % Negócio Ganho = ganhos ÷ (ganhos + perdidos) × 100&#10;   (só entre as leads fechadas — mede a qualidade da source)&#10;&#10;• O mês nunca muda: uma lead criada em junho fica sempre em junho, só muda de bucket conforme evolui.&#10;&#10;• Filtros aplicados: clube, comercial e período da aba horizontal.&#10;• Leads sem source preenchido contam como 'Lead Digital' por default." style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid var(--grey);color:var(--grey);border-radius:50%;font-size:10px;font-weight:700;cursor:help;font-family:inherit">i</span>
+      <span title="Como se calcula (igual ao Closum):&#10;&#10;• Cada lead é atribuída ao período pela DATA REAL DE CRIAÇÃO no Closum. A data de fecho não é usada.&#10;&#10;• Cada lead conta UMA vez, no bucket do seu estado ATUAL:&#10;   – Ganho → Ganhos&#10;   – Perdido → Perdidos&#10;   – Qualquer outro (Novo, Follow-up, etc.) → Em curso&#10;&#10;• Qty = Ganhos + Perdidos + Em curso&#10;• As percentagens dos 3 sub-valores são calculadas sobre a Qty da source&#10;&#10;• O gráfico usa uma fórmula diferente:&#10;   % Negócio Ganho = ganhos ÷ (ganhos + perdidos) × 100&#10;   (só entre as leads fechadas — mede a qualidade da source)&#10;&#10;• O mês nunca muda: uma lead criada em junho fica sempre em junho, só muda de bucket conforme evolui.&#10;&#10;• Filtros aplicados: clube, comercial e período da aba horizontal.&#10;• Leads sem source preenchido contam como 'Leads Ads' (excluem-se as de tag Website e as de recrutamento)." style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid var(--grey);color:var(--grey);border-radius:50%;font-size:10px;font-weight:700;cursor:help;font-family:inherit">i</span>
     </div>
     <div id="conv-source-display" class="grid" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px"></div>
     <div class="dash-section-label">Motivos de Negócio Perdido</div>
@@ -1494,7 +1494,7 @@ const SCHEMA = {
     { key:"canal",                label:"Canal",                type:"text",          w:100 },
     // Source: so de leitura. E o Closum que manda nela, e as excepcoes corrigem-se
     // por codigo (ver _FIX_SOURCE), para ninguem lhe tocar sem querer.
-    { key:"source",               label:"Source",               type:"computed",      w:180, compute:r=>r.source||"" },
+    { key:"source",               label:"Source",               type:"computed",      w:180, compute:r=>r.source?normalizeSource(r.source):"" },
     { key:"_tempoResp",           label:"Tempo resp. (min)",    type:"computed",      w:110, compute:r=>computeTempoResp(r) },
     { key:"_sla",                 label:"SLA",                  type:"slaBadge",      w:100, compute:r=>computeSLA(r) },
     { key:"sequencia",            label:"Sequência",           type:"seqBadge", w:160, compute:r=>r.sequencia||r.resultado||"" },
@@ -3652,7 +3652,7 @@ function aggregateLeadDigitalConv(previous) {
     baseRows = baseRows.filter(r => membros.includes(r.comercial));
   }
   if (comF) baseRows = baseRows.filter(r => r.comercial === comF);
-  baseRows = baseRows.filter(r => normalizeSource(r.source) === 'Lead Digital');
+  baseRows = baseRows.filter(r => normalizeSource(r.source) === 'Leads Ads');
 
   const p = filters.period;
   const inPeriod = (iso) => !p || p === 'comparar' || matchPeriod(String(iso).slice(0,10), p, !!previous);
@@ -4278,7 +4278,7 @@ const SOURCE_COLORS = ['#F97316','#A855F7','#22C55E','#60A5FA','#FBBF24','#F8717
 // Lista fixa de sources que aparecem SEMPRE como card (mesmo com 0 leads).
 // "LEADS" do Closum é renomeado para "Contacto Direto Clube" via normalizeSource()
 const SOURCE_BASELINE = [
-  'Lead Digital',
+  'Leads Ads',
   'Website',
   'Contacto Direto Clube',
   'Walk-in não convertido',
@@ -4361,7 +4361,28 @@ function renderConvSourceDisplay() {
   if (!el) return;
   const { sources, stats } = aggregateSources(false);
 
-  el.innerHTML = sources.map((s, i) => {
+  // Card "Total de Leads": soma de todas as sources reais. O "Tombstone"
+  // (leads apagadas na dashboard) fica de fora — nao sao leads do funil.
+  const _tot = { qty:0, ganhos:0, perdidos:0, emCurso:0 };
+  sources.forEach(function (s) {
+    if (s === 'Tombstone') return;
+    const st = stats[s];
+    if (!st) return;
+    _tot.qty += st.qty; _tot.ganhos += st.ganhos; _tot.perdidos += st.perdidos; _tot.emCurso += st.emCurso;
+  });
+  const _pc = (n) => _tot.qty > 0 ? Math.round(n / _tot.qty * 100) : 0;
+  const cardTotal =
+    '<div class="kpi" style="border-left:3px solid var(--orange)">' +
+      '<div class="lbl">Total de Leads</div>' +
+      '<div class="val">' + _tot.qty + '</div>' +
+      '<div class="sub">' +
+        '<span style="color:#22C55E">' + _tot.ganhos + ' ganhos (' + _pc(_tot.ganhos) + '%)</span> · ' +
+        '<span style="color:#F87171">' + _tot.perdidos + ' perdidos (' + _pc(_tot.perdidos) + '%)</span> · ' +
+        '<span style="color:#60A5FA">' + _tot.emCurso + ' em curso (' + _pc(_tot.emCurso) + '%)</span>' +
+      '</div>' +
+    '</div>';
+
+  el.innerHTML = cardTotal + sources.map((s, i) => {
     const st = stats[s];
     const total = st.qty;
     const pctG = total > 0 ? Math.round((st.ganhos/total)*100)   : 0;
@@ -4805,7 +4826,7 @@ function renderLeadsPanel() {
   const elPct = document.getElementById("lead-conv-pct");
   const elSub = document.getElementById("lead-conv-sub");
   if (elPct) elPct.textContent = pctConv+"%";
-  if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Lead Digital";
+  if (elSub) elSub.textContent = ganhos+" ganhos de "+ldConv.total+" Leads Ads";
 
   // Tempo médio de 1.º contacto (todos os clubes) — respeita o período/unit/com global
   const tempoEl = document.getElementById("lead-tempo-medio");
@@ -7394,7 +7415,10 @@ function isLostSeq(seqName) {
 // Normaliza o campo "source" do Closum
 function normalizeSource(s) {
   const v = String(s||'').trim();
-  if (!v) return 'Lead Digital';
+  // Sem source preenchida = "Leads Ads". O valor gravado nas leads antigas
+  // continua a ser "Lead Digital"; so muda a etiqueta mostrada.
+  if (!v) return 'Leads Ads';
+  if (v.toUpperCase() === 'LEAD DIGITAL') return 'Leads Ads';
   const upper = v.toUpperCase();
   if (upper === 'LEADS') return 'Contacto Direto Clube';
   if (upper === 'WI')    return 'Walk-in não convertido';
