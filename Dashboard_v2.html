@@ -7087,8 +7087,16 @@ function _reportParseSheet(sheet, year) {
   }
   if (headerRow < 0) return [];
   const headers = (grid[headerRow]||[]).map(c => c==null?'':String(c).trim());
+  // O bloco "Objectivos & Comparativo" (à direita) tem cabeçalhos próprios que podem
+  // repetir nomes do bloco diário: em Novembro a coluna de comparação com o mês
+  // anterior chama-se "OUT" (Outubro), igual à coluna de Outbound. Sem isto, o
+  // Outbound era lido da coluna do comparativo. Limitamos a leitura às colunas
+  // antes de "INDICADOR" e a primeira ocorrência de cada cabeçalho é a que vale.
+  let limiteCol = headers.length;
+  const idxIndicador = headers.indexOf('INDICADOR');
+  if (idxIndicador > 0) limiteCol = idxIndicador;
   const colMap = {};
-  headers.forEach((h,i)=>{ if (h) colMap[h]=i; });
+  headers.forEach((h,i)=>{ if (h && i < limiteCol && colMap[h] === undefined) colMap[h] = i; });
   const dataCol = colMap['DATA'];
   if (dataCol === undefined) return [];
 
