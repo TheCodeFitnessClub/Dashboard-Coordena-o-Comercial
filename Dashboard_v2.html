@@ -766,18 +766,7 @@ body.dark-mode .dark-toggle{color:#e2e8f0}
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:var(--card-bg);border-radius:var(--radius-sm);border:1px solid var(--line);flex-wrap:wrap">
       <span style="font-size:11px;color:var(--grey);font-weight:600;margin-right:6px">📥 Importar report mensal:</span>
-      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
-        Cidade Universitária
-        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Cidade Universitária','Henrique')">
-      </label>
-      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
-        Saldanha
-        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Saldanha','Íris')">
-      </label>
-      <label class="btn-import-club" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">
-        Universidade Nova
-        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,'Universidade Nova','Diogo')">
-      </label>
+      <span id="import-club-botoes" style="display:inline-flex;gap:10px;flex-wrap:wrap"></span>
       <span id="import-club-status" style="font-size:11px;color:var(--grey);margin-left:auto"></span>
     </div>
 
@@ -6133,7 +6122,7 @@ function initSubTabs() {
 }
 function renderSubPanel(group, subtab) {
   if (group==="kpis") {
-    if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); updateExcelSyncStatus(); }
+    if (subtab==="inputs")     { renderInputsKpis(); renderInputsGrouped("t-inputs"); updateExcelSyncStatus(); renderBotoesImportClube(); }
     if (subtab==="comerciais") renderComerciais();
     if (subtab==="kpisM")      renderKpisMensais();
   }
@@ -6156,8 +6145,9 @@ function renderAllForKey(schemaKey) {
     equipa:"t-equipa", metas:"t-metas",
     objetivos:"t-objetivos", vendasExtras:"t-vendas-extras",
   };
-  if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); }
+  if (schemaKey==="inputs") { renderInputsKpis(); renderInputsGrouped("t-inputs"); renderBotoesImportClube(); }
   else if (map[schemaKey]) renderTable(map[schemaKey], schemaKey);
+  if (schemaKey==="equipa") { renderBotoesImportClube(); populateFilters(); }
   if (schemaKey==="rotina") { renderRotinaAlert(); renderRotinaKanban(); }
   if (REUNIOES_KEYS.includes(schemaKey)) renderReunioesPanel();
   if (schemaKey==="tarefas") {
@@ -7144,7 +7134,43 @@ function _reportParseSheet(sheet, year) {
   return inputs;
 }
 const REPORT_CUTOFF = '2026-06-01';
+
+// O comercial de cada clube vem SEMPRE das Definições (state.equipa) — nunca
+// escrito à mão no HTML. Assim, trocar um comercial de clube nas Definições
+// reflecte-se logo nos botões de import e no comercial gravado nas linhas.
+function comercialDaUnidade(unidade) {
+  const eq = (state.equipa || []).filter(e => e && e.unidade === unidade);
+  if (!eq.length) return '';
+  const ativo = eq.filter(e => String(e.estado || 'Ativo') === 'Ativo');
+  const lista = ativo.length ? ativo : eq;
+  // Se houver mais do que um, vale o que começou mais tarde.
+  lista.sort((a, b) => String(b.dataInicio || '').localeCompare(String(a.dataInicio || '')));
+  return lista[0].comercial || '';
+}
+function renderBotoesImportClube() {
+  const box = document.getElementById('import-club-botoes');
+  if (!box) return;
+  const unidades = [];
+  (state.equipa || []).forEach(e => {
+    if (e && e.unidade && !unidades.includes(e.unidade)) unidades.push(e.unidade);
+  });
+  if (!unidades.length) {
+    box.innerHTML = '<span style="font-size:11px;color:var(--grey)">Sem equipa definida em Definições</span>';
+    return;
+  }
+  box.innerHTML = unidades.map(u => {
+    const com = comercialDaUnidade(u);
+    const titulo = com ? u + ' · ' + com : u;
+    return '<label class="btn-import-club" title="' + escapeHtml(titulo) + '" style="padding:6px 14px;border:1.5px solid var(--line);border-radius:6px;font-size:11px;background:var(--bg);cursor:pointer;font-family:inherit;font-weight:600;color:var(--dark);transition:all .15s;display:inline-flex;align-items:center;gap:6px">'
+      + escapeHtml(u)
+      + (com ? '<span style="font-weight:500;color:var(--grey)">' + escapeHtml(com) + '</span>' : '')
+      + '<input type="file" accept=".xlsx,.xls" style="display:none" onchange="importClubReport(this,\'' + u.replace(/'/g, "\\'") + '\')">'
+      + '</label>';
+  }).join('');
+}
+
 function importClubReport(inputEl, unidade, comercial) {
+  if (comercial === undefined || comercial === null || comercial === '') comercial = comercialDaUnidade(unidade);
   const file = inputEl.files && inputEl.files[0];
   if (!file) return;
   const statusEl = document.getElementById('import-club-status');
@@ -7190,6 +7216,7 @@ function importClubReport(inputEl, unidade, comercial) {
       // Re-render
       renderInputsKpis();
       renderInputsGrouped('t-inputs');
+      renderBotoesImportClube();
     } catch (e) {
       console.error('[import] '+unidade+':', e);
       showBanner('Erro a importar '+unidade+': '+e.message, 'error');
@@ -8594,6 +8621,32 @@ function _runOneShotMigrateNova() {
 // One-shot: sources corrigidas a mao quando nao havia forma de o fazer na interface.
 // Ficam marcadas como manuais, por isso nenhum sync as reescreve.
 const _FIX_SOURCE = { 'CLO-60666951': 'REFS' };   // Matteo de Campos: tag de website punha-o em Website
+const _OUT_BUG_NOV = [
+  { unidade: 'Cidade Universitária', data: '2026-11-02', outbound: 650 },
+  { unidade: 'Cidade Universitária', data: '2026-11-03', outbound: 210 },
+  { unidade: 'Saldanha',             data: '2026-11-02', outbound: 788 },
+  { unidade: 'Saldanha',             data: '2026-11-03', outbound: 84 },
+  { unidade: 'Universidade Nova',    data: '2026-11-02', outbound: 903 },
+  { unidade: 'Universidade Nova',    data: '2026-11-03', outbound: 191 },
+];
+function _runOneShotOutboundNov() {
+  const FLAG = 'outboundNovComparativo_v1';
+  if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
+  let mudou = 0;
+  (state.inputs || []).forEach(r => {
+    if (!r) return;
+    const d = String(r.data || '').slice(0, 10);
+    const mau = _OUT_BUG_NOV.find(b => b.unidade === r.unidade && b.data === d && Number(r.outbound) === b.outbound);
+    if (mau) { r.outbound = 0; mudou++; }
+  });
+  if (!state.__cleanupDone) state.__cleanupDone = {};
+  state.__cleanupDone[FLAG] = true;
+  if (mudou > 0) {
+    console.log('[migrate] Outbound errado (coluna comparativo) limpo em', mudou, 'linha(s)');
+    saveState();
+  }
+}
+
 function _runOneShotFixSource() {
   const FLAG = 'fixSource_v1';
   if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
@@ -8666,6 +8719,7 @@ if (SERVER_SYNC) {
     _runOneShotMigrateNova();
     _runOneShotSociosFimManual();
     _runOneShotFixSource();
+    _runOneShotOutboundNov();
     _runOneShotRestoreDataEntrada();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   });
