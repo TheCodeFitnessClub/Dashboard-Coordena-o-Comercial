@@ -7710,14 +7710,20 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
     // Índice de leads existentes por CLO-{id}
     const byId = {};
     state.leads.forEach(l => { if (l.leadId) byId[l.leadId] = l; });
-    // Preservar dataPrimeiroContacto: rastrear por leadId E por nome
+    // Preservar dataPrimeiroContacto: rastrear SÓ por leadId.
     // (qualquer data já preenchida — manual ou auto — NUNCA é sobrescrita por sync)
-    const savedDPC = {};
+    //
+    // Antes havia também um índice por NOME, e era um erro: quando a mesma
+    // pessoa responde outra vez aos anúncios, o Closum cria uma lead NOVA, com
+    // id e data de criação novos. Essa lead nova encontrava o nome no índice e
+    // herdava o 1.º contacto do registo antigo — ficava com a data e hora de um
+    // contacto de meses antes. Pior ainda com nomes próprios soltos ("Rita",
+    // "Tiago"): pessoas diferentes herdavam o contacto umas das outras.
+    // Cada lead passa a ter os seus próprios tempos, lidos do seu histórico.
     const savedDPCById = {};
     state.leads.forEach(l => {
       const dpc = l.dataPrimeiroContacto && String(l.dataPrimeiroContacto).trim();
       if (!dpc) return;
-      if (l.nome) savedDPC[l.nome.trim().toLowerCase()] = dpc;
       if (l.leadId) savedDPCById[l.leadId] = dpc;
     });
 
@@ -8041,7 +8047,6 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
       let source = sourceFound ? normalizeSource(sourceFound) : '';
       if (!source && _hasWebsiteTag) source = 'Website';
 
-      const nomeKey = (al.name||'').trim().toLowerCase();
       if (byId[lid]) {
         const ex = byId[lid];
         let changed = false;
@@ -8129,11 +8134,18 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
         // o relogio do tempo de resposta so arranca quando alguem fica com ela.
         // E preenchida mais tarde, assim que a passagem aparecer (ver abaixo).
         const dataEntradaNova = (nd && nd.passagem) ? adjustEntradaHorario(nd.passagem) : '';
-        const dpcGuardado = savedDPCById[lid] || savedDPC[nomeKey] || '';
+        const dpcGuardado = savedDPCById[lid] || '';
         const dpcNota = (nd && nd.primeiro) ? nd.primeiro : '';
         const dpcFromSeq = (!dpcGuardado && !dpcNota && seqResultado && seqResultado !== 'Novo' && seqTs) ? seqTs : '';
         // Se a lead já entra fechada (ganho/perdido), guardar dataFecho
         const dataFecho = isClosedSeq(seqResultado) ? (seqTs || getCurrentLocalDatetime()) : '';
+        // Uma lead não pode ter sido contactada antes de existir. Se alguma via
+        // trouxer uma data anterior ao dia da criação, é de outro registo: ignorar.
+        const _diaCriacao = String(dataCriacao).slice(0,10);
+        const _dpcValido = v => {
+          const d = String(v || '').replace(' ','T').slice(0,10);
+          return d && _diaCriacao && d >= _diaCriacao ? v : '';
+        };
         state.leads.push({
           leadId:               lid,
           nome:                 al.name || '',
@@ -8144,7 +8156,7 @@ async function doSyncClosum(silent = false, forceAllSource = false, periodOpts =
           dataEntrada:          dataEntradaNova,
           dataCriacao,
           comercial:            closumUserToComercial(userMap[al.user_id]),
-          dataPrimeiroContacto: dpcGuardado || dpcNota || dpcFromSeq,
+          dataPrimeiroContacto: _dpcValido(dpcGuardado || dpcNota || dpcFromSeq),
           sequencia:            seqResultado,
           dataFecho,
           motivoPerdido,
@@ -8647,6 +8659,32 @@ function _runOneShotOutboundNov() {
   }
 }
 
+// One-shot: limpar o dataPrimeiroContacto herdado de uma lead homónima.
+// Fingerprint seguro: um contacto anterior ao DIA de criação da própria lead é
+// impossível — só pode ter vindo do índice por nome que acabou de ser removido.
+// Datas postas à mão ficam intactas; as limpas voltam a ser lidas do histórico
+// da própria lead no sync seguinte.
+function _runOneShotDPCHerdado() {
+  const FLAG = 'dpcHerdadoPorNome_v1';
+  if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
+  let mudou = 0;
+  (state.leads || []).forEach(l => {
+    if (!l || (l._manual && l._manual.dataPrimeiroContacto)) return;
+    const cri = String(l.dataCriacao || '').replace(' ','T').slice(0,10);
+    const dpc = String(l.dataPrimeiroContacto || '').replace(' ','T').slice(0,10);
+    if (!cri || !dpc || dpc >= cri) return;
+    l.dataPrimeiroContacto = '';
+    l._nb = 1;                 // garante que o sync vai reler as notas desta lead
+    mudou++;
+  });
+  if (!state.__cleanupDone) state.__cleanupDone = {};
+  state.__cleanupDone[FLAG] = true;
+  if (mudou > 0) {
+    console.log('[migrate] 1.o contacto herdado por nome limpo em', mudou, 'lead(s)');
+    saveState();
+  }
+}
+
 function _runOneShotFixSource() {
   const FLAG = 'fixSource_v1';
   if (state.__cleanupDone && state.__cleanupDone[FLAG]) return;
@@ -8720,6 +8758,7 @@ if (SERVER_SYNC) {
     _runOneShotSociosFimManual();
     _runOneShotFixSource();
     _runOneShotOutboundNov();
+    _runOneShotDPCHerdado();
     _runOneShotRestoreDataEntrada();
     if (changed) { populateFilters(); renderActivePanel(); updateTabCounts(); }
   });
